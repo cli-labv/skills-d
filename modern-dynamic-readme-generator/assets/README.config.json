@@ -1,0 +1,132 @@
+{
+  "version": "1.0.0",
+  "modes": {
+    "minimal": {
+      "sections": ["about", "installation", "usage", "license"],
+      "includeTOC": false,
+      "includeBadges": true,
+      "includeScreenshots": false,
+      "includeDiagrams": false,
+      "maxSections": 4
+    },
+    "standard": {
+      "sections": ["about", "installation", "configuration", "usage", "testing", "contributing", "license"],
+      "includeTOC": true,
+      "includeBadges": true,
+      "includeScreenshots": true,
+      "includeDiagrams": false,
+      "maxSections": 10
+    },
+    "complete": {
+      "sections": ["about", "installation", "configuration", "usage", "dependencies", "testing", "docker", "security", "metrics", "roadmap", "contributing", "license", "development", "architecture", "api", "changelog", "authors", "acknowledgments", "support"],
+      "includeTOC": true,
+      "includeBadges": true,
+      "includeScreenshots": true,
+      "includeDiagrams": true,
+      "maxSections": 20
+    },
+    "showcase": {
+      "sections": ["about", "installation", "configuration", "usage", "dependencies", "testing", "docker", "security", "metrics", "roadmap", "contributing", "license", "development", "architecture", "api", "changelog", "authors", "acknowledgments", "support"],
+      "includeTOC": true,
+      "includeBadges": true,
+      "includeScreenshots": true,
+      "includeDiagrams": true,
+      "maxSections": 25
+    }
+  },
+  "themes": {
+    "professional": {
+      "headerStyle": "centered",
+      "colorScheme": "light",
+      "badgeStyle": "standard",
+      "sectionStyle": "simple",
+      "codeStyle": "boxed",
+      "tableStyle": "bordered"
+    },
+    "technological": {
+      "headerStyle": "banner",
+      "colorScheme": "dark",
+      "badgeStyle": "colorful",
+      "sectionStyle": "boxed",
+      "codeStyle": "highlighted",
+      "tableStyle": "striped"
+    },
+    "minimalist": {
+      "headerStyle": "left",
+      "colorScheme": "light",
+      "badgeStyle": "minimal",
+      "sectionStyle": "simple",
+      "codeStyle": "inline",
+      "tableStyle": "simple"
+    },
+    "colorful": {
+      "headerStyle": "centered",
+      "colorScheme": "colorful",
+      "badgeStyle": "colorful",
+      "sectionStyle": "gradient",
+      "codeStyle": "highlighted",
+      "tableStyle": "striped"
+    },
+    "corporate": {
+      "headerStyle": "banner",
+      "colorScheme": "light",
+      "badgeStyle": "standard",
+      "sectionStyle": "boxed",
+      "codeStyle": "boxed",
+      "tableStyle": "bordered"
+    }
+  },
+  "badges": {
+    "includeVersion": true,
+    "includeLicense": true,
+    "includeLanguage": true,
+    "includeCIStatus": true,
+    "includeCoverage": false,
+    "includeStars": true,
+    "includeForks": false,
+    "includeIssues": true,
+    "includePullRequests": false,
+    "includeDownloads": false,
+    "includeDependencies": false,
+    "style": "flat-square"
+  },
+  "i18n": {
+    "defaultLocale": "en",
+    "availableLocales": ["en", "es", "bilingual"],
+    "fallback": "en"
+  },
+  "customContentMarkers": {
+    "start": "<!-- CUSTOM:START id=\"",
+    "end": "\" -->",
+    "close": "<!-- CUSTOM:END -->"
+  },
+  "sectionComponents": {
+    "about": { "emoji": "📖", "required": true },
+    "installation": { "emoji": "🚀", "required": true },
+    "configuration": { "emoji": "⚙️", "required": false },
+    "usage": { "emoji": "💡", "required": true },
+    "dependencies": { "emoji": "📦", "required": false },
+    "testing": { "emoji": "🧪", "required": false },
+    "docker": { "emoji": "🐳", "required": false },
+    "security": { "emoji": "🔐", "required": false },
+    "metrics": { "emoji": "📊", "required": false },
+    "roadmap": { "emoji": "🗺️", "required": false },
+    "contributing": { "emoji": "🤝", "required": false },
+    "license": { "emoji": "📄", "required": true },
+    "development": { "emoji": "🛠️", "required": false },
+    "architecture": { "emoji": "🏗️", "required": false },
+    "api": { "emoji": "🔌", "required": false },
+    "changelog": { "emoji": "📝", "required": false },
+    "authors": { "emoji": "✍️", "required": false },
+    "acknowledgments": { "emoji": "🙏", "required": false },
+    "support": { "emoji": "💬", "required": false }
+  },
+  "ecosystems": ["nodejs", "rust", "python", "go", "docker"],
+  "languages": ["en", "es", "bilingual"],
+  "validation": {
+    "checkLinks": true,
+    "checkImages": true,
+    "checkBadges": true,
+    "allowPlaceholders": false
+  }
+}

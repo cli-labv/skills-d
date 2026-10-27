@@ -1,32 +1,86 @@
-# Skilld — Ecosistema de Skills para Aplicaciones CLI
+<div align="center">
 
-Conjunto de skills modulares y reutilizables para construir aplicaciones de línea de comandos (CLI) profesionales, rápidas y seguras. Cada skill cubre una capa específica de la app y se activa solo cuando el usuario la necesita.
+# 📚 Skilld — Ecosistema de Skills para Aplicaciones CLI
 
-## ¿Qué es esto?
+[![skills](https://img.shields.io/badge/skills-14-blue?style=for-the-badge)](./)
+[![type](https://img.shields.io/badge/type-instructions-green?style=for-the-badge)](./)
+[![language](https://img.shields.io/badge/language-markdown-3178c6?style=for-the-badge&logo=markdown)](./)
+[![platform](https://img.shields.io/badge/platform-CLI-gray?style=for-the-badge)](./)
 
-Es una colección de instrucciones para agentes que quieren crear o mejorar apps CLI. No es código para ejecutar directamente, es conocimiento procedimental que el agente aplica paso a paso en cada proyecto.
+**Conjunto de skills modulares y reutilizables para construir aplicaciones de línea de comandos (CLI) profesionales, rápidas y seguras.**
 
-## Skills incluidas
+[Reportar error](https://github.com/issues) · [Solicitar funcionalidad](https://github.com/issues)
 
-| # | Skill | Para qué sirve |
-|---|-------|----------------|
-| 1 | `work-directory-management` | Gestiona carpetas `input/` y `output/`, las excluye de Git y las crea al arranque. |
-| 2 | `adaptive-menu-system` | Genera menús interactivos adaptados al tipo de app (CLI, GUI, Web, Mobile). |
-| 3 | `intelligent-bootstrap-system` | Arranque inteligente con loader dinámico, estados Fresh/Ready/Dirty y flags CLI. |
-| 4 | `cli-banner-system` | Sistema de banners para CLI con catálogo de estilos y configuración vía JSON. |
-| 5 | `progress-orchestrator` | Barras de progreso y spinners con ciclo de vida completo (start, update, finish, fail, cancel). |
-| 6 | `universal-file-scanner` | Escaneo de sistemas de archivos con detección de duplicados, filtros y estadísticas. |
-| 7 | `incremental-cache-system` | Caché incremental que evita reprocesar archivos sin cambios (5 niveles de estado). |
-| 8 | `parallel-processing-orchestrator` | Procesamiento paralelo con detección automática IO-bound vs CPU-bound. |
-| 9 | `universal-input-validation` | Validación de entradas antes de operaciones costosas (3 niveles: fast, standard, deep). |
-| 10 | `universal-memory-controller` | Control de memoria con estrategias full-load, chunked, streaming, mmap y temp-file. |
-| 11 | `universal-modular-architecture` | Arquitectura modular con inyección de dependencias, contratos y checklist de calidad. |
-| 12 | `ascii-banner-generator` | Generador de banners ASCII con alfabeto completo, fuentes, temas y animaciones. |
-| 13 | `cli-orchestrator` | Orquestador maestro que define el orden de ejecución y reglas CLI-only. |
+</div>
 
-## Flujo de ejecución de una app CLI
+## 📖 Tabla de Contenidos
 
+<details open>
+<summary>Haz clic para expandir</summary>
+
+- [📖 Sobre el Proyecto](#-sobre-el-proyecto)
+- [🚀 Instalación](#-instalación)
+- [💡 Uso](#-uso)
+- [🔄 Flujo de Ejecución](#-flujo-de-ejecución)
+- [📋 Reglas de Oro](#-reglas-de-oro)
+- [📁 Estructura del Proyecto](#-estructura-del-proyecto)
+- [📄 Licencia](#-licencia)
+
+</details>
+
+## 📖 Sobre el Proyecto
+
+Skilld es una colección de instrucciones procedurales para agentes que desean crear o mejorar aplicaciones de línea de comandos (CLI). No es código para ejecutar directamente; es conocimiento no obvio, de dominio y de organización que el agente aplica paso a paso en cada proyecto.
+
+Cada skill cubre una capa específica de la app y se activa solo cuando el usuario la necesita, siguiendo el principio de progressive disclosure.
+
+### Características
+
+- ⚡ Modular: una skill por capa de responsabilidad.
+- 🔒 CLI-only: diseñado exclusivamente para aplicaciones de línea de comandos.
+- 🧠 Progressive disclosure: carga solo lo necesario según el nivel de activación.
+- 📦 Reutilizable: funciona en proyectos de cualquier lenguaje.
+- 🇪🇸🇺🇸 Internacionalizado: documentación en español e inglés.
+
+## 🚀 Instalación
+
+### Requisitos previos
+
+No hay dependencias de ejecución. Este repositorio contiene únicamente instrucciones en formato Markdown.
+
+### Pasos de instalación
+
+```bash
+# Clonar el repositorio de skills
+git clone https://github.com/tu-usuario/skilld.git
+cd skilld
+
+# Explorar la skill que necesites
+ls work-directory-management/
+cat work-directory-management/SKILL.md
 ```
+
+## 💡 Uso
+
+### 1. Lee el orquestador
+
+Comienza por `cli-orchestrator.md` para entender el orden de fases de ejecución de una aplicación CLI.
+
+### 2. Activa la skill correspondiente
+
+Cada fase del flujo CLI tiene una skill asignada. Actívala según lo que el usuario solicite.
+
+### 3. Consulta la SKILL.md de cada skill
+
+Cada carpeta de skill contiene su propio `SKILL.md` con instrucciones imperativas, reglas y ejemplos de uso.
+
+### 4. Los archivos .txt originales
+
+Los archivos numéricos originales (`1.txt`, `2.txt`, etc.) están guardados dentro de cada carpeta de skill como registro de origen de la idea.
+
+## 🔄 Flujo de Ejecución
+
+```text
 1. Bootstrap          → intelligent-bootstrap-system
 2. Banner             → ascii-banner-generator
 3. Entrada / Menú     → adaptive-menu-system
@@ -39,21 +93,15 @@ Es una colección de instrucciones para agentes que quieren crear o mejorar apps
 10. Finalización      → limpieza de recursos
 ```
 
-## Reglas de oro
+## 📋 Reglas de Oro
 
 - **Solo CLI:** No usar skills de web, desktop, móvil o servidores HTTP.
 - **Una skill por capa:** Cada módulo tiene una responsabilidad única.
 - **Activación por description:** La skill se activa por su descripción en el frontmatter, nunca por el cuerpo.
 - **Menos de 500 líneas:** Cada `SKILL.md` se mantiene conciso y sin relleno.
+- **Sin README/CHANGELOG humanos:** Las skills son para el agente, no para humanos.
 
-## Cómo usar
-
-1. Lee `cli-orchestrator.md` para entender el orden de fases.
-2. Activa la skill correspondiente en cada fase según lo que el usuario pida.
-3. Consulta la `SKILL.md` de cada skill para las instrucciones imperativas detalladas.
-4. Los archivos `.txt` originales están guardados dentro de cada carpeta de skill como registro de origen.
-
-## Estructura del proyecto
+## 📁 Estructura del Proyecto
 
 ```
 skilld/
@@ -71,14 +119,73 @@ skilld/
 │   ├── scripts/
 │   ├── assets/
 │   └── 2.txt
-├── ... (una carpeta por skill)
-└── ascii-banner-generator/
-    ├── SKILL.md
-    ├── scripts/
-    ├── assets/
-    └── 12.txt
+├── intelligent-bootstrap-system/
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── assets/
+│   └── 3.txt
+├── cli-banner-system/
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── assets/
+│   └── 4.txt
+├── progress-orchestrator/
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── assets/
+│   └── 5.txt
+├── universal-file-scanner/
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── assets/
+│   └── 6.txt
+├── incremental-cache-system/
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── assets/
+│   └── 7.txt
+├── parallel-processing-orchestrator/
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── assets/
+│   └── 8.txt
+├── universal-input-validation/
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── assets/
+│   └── 9.txt
+├── universal-memory-controller/
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── assets/
+│   └── 10.txt
+├── universal-modular-architecture/
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── assets/
+│   └── 11.txt
+├── ascii-banner-generator/
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── assets/
+│   └── 12.txt
+├── modern-dynamic-readme-generator/
+│   ├── SKILL.md
+│   ├── scripts/
+│   ├── assets/
+│   ├── references/
+│   └── 13.txt
+└── cli-orchestrator.md
 ```
+
+## 📄 Licencia
+
+Distribuido bajo la Licencia MIT. Véase `LICENSE` para más información.
 
 ---
 
-Todas las skills están en `/home/victor/skilld/` y siguen el estándar de estructura de skill-creator (`SKILL.md`, `scripts/`, `references/`, `assets/`).
+<div align="center">
+
+[Volver al inicio](#-skilld---ecosistema-de-skills-para-aplicaciones-cli)
+
+</div>
