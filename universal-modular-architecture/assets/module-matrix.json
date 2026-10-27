@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "mandatory": ["config", "validation", "processing", "output", "errors", "utils"],
+  "optionalByProject": {
+    "CLI Tool": ["input", "scanner", "parallel", "memory", "cache", "progress", "ui", "reporting", "i18n"],
+    "Web Service": ["input", "scanner", "parallel", "memory", "cache", "reporting", "i18n"],
+    "Desktop App": ["input", "scanner", "parallel", "memory", "cache", "progress", "ui", "i18n"],
+    "Automation": ["input", "scanner", "parallel", "memory", "cache", "progress", "reporting", "i18n"],
+    "Library": ["input", "ui", "progress", "reporting"]
+  },
+  "notApplicable": {
+    "Library": ["input", "scanner", "parallel", "memory", "cache", "output", "progress", "ui", "reporting"]
+  }
+}

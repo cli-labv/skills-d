@@ -1,0 +1,1042 @@
+## Skill: Validación de Entradas Universal - Sistema de Verificación Previa Inteligente y Seguro
+
+**Descripción General:**
+Implementar un sistema universal, reutilizable e inteligente de validación de entradas que verifique todos los datos proporcionados por el usuario antes de comenzar una operación costosa, evitando errores tardíos, resultados incompletos o daños en los archivos; el sistema debe exponer una arquitectura de validadores reutilizables para rutas, carpetas, permisos, extensiones, formatos, tamaños, nombres, opciones de configuración y dependencias externas, con una salida estructurada que indique si la entrada es válida, qué errores existen, qué advertencias deben mostrarse y cómo corregirlas; debe validar que las rutas existan, que sean del tipo esperado, que tengan permisos suficientes, que no apunten accidentalmente al directorio de salida, que los archivos no estén vacíos o corruptos, que las extensiones estén soportadas, que las opciones sean compatibles entre sí y que haya espacio suficiente cuando sea necesario; además, debe ofrecer tres niveles de validación (rápido, estándar, profundo), mensajes internacionalizados, validación previa a cada fase y reglas de seguridad estrictas para impedir rutas peligrosas, sobrescrituras involuntarias o acceso fuera del directorio permitido, integrándose perfectamente con el **SmartScanner**, **Progress Orchestrator**, **ParallelOrchestrator** y el resto del ecosistema de skills.
+
+---
+
+### **Fase 1: Arquitectura del Sistema de Validación**
+
+#### **1.1 Componentes Principales:**
+
+**ValidationOrchestrator (Orquestador Principal):**
+- Punto de entrada único mediante interfaz `validate(input, schema, options)`
+- Coordina todos los validadores en el orden correcto
+- Gestiona dependencias entre validaciones (algunas requieren que otras pasen primero)
+- Aplica el nivel de validación seleccionado
+- Devuelve resultado estructurado completo
+
+**ValidatorRegistry (Registro de Validadores):**
+- Catálogo central de todos los validadores disponibles
+- Permite registrar validadores personalizados
+- Indexa validadores por tipo, categoría y prioridad
+- Soporta composición de validadores (combinar varios en uno)
+- Incluye validadores built-in y extensiones de terceros
+
+**ValidationPipeline (Pipeline de Validación):**
+- Ejecuta validadores en secuencia o paralelo según dependencias
+- Implementa short-circuit (detener al primer error fatal)
+- Soporta validación en fases (pre-ejecución, durante, post-ejecución)
+- Permite reutilizar resultados de validaciones previas
+
+**SecurityGuard (Guardia de Seguridad):**
+- Componente especializado en detección de amenazas
+- Previene path traversal, symlink attacks, race conditions
+- Bloquea operaciones peligrosas antes de que ocurran
+- Implementa sandboxing de rutas
+- Registra intentos sospechosos
+
+**ErrorAggregator (Agregador de Errores):**
+- Recopila todos los errores y advertencias
+- Los clasifica por severidad: fatal, error, warning, info
+- Genera mensajes de corrección automáticos
+- Agrupa errores relacionados para mejor UX
+- Soporta deduplicación de errores similares
+
+**I18nManager (Gestor de Internacionalización):**
+- Traduce todos los mensajes de validación
+- Soporta múltiples idiomas
+- Permite personalización de mensajes por aplicación
+- Mantiene consistencia terminológica
+- Soporta placeholders dinámicos en mensajes
+
+---
+
+### **Fase 2: Interfaz y API Pública**
+
+#### **2.1 Método Principal:**
+
+```
+validate(input, schema, options): ValidationResult
+```
+
+**Parámetros:**
+- `input`: Datos a validar (objeto, ruta, archivo, configuración, etc.)
+- `schema`: Definición de reglas de validación a aplicar
+- `options`: Configuración del proceso de validación
+
+**Retorno:**
+- `ValidationResult`: Estructura completa con validez, errores, advertencias y sugerencias
+
+#### **2.2 Métodos Adicionales:**
+
+**`validatePath(path, options)`:**
+- Validación especializada para rutas de archivos/carpetas
+- Verifica existencia, tipo, permisos, seguridad
+
+**`validateConfig(config, schema)`:**
+- Validación de archivos de configuración
+- Detecta opciones incompatibles
+- Sugiere valores por defecto
+
+**`validateDependencies(requirements)`:**
+- Verifica que todas las dependencias estén instaladas
+- Comprueba versiones compatibles
+- Sugiere comandos de instalación
+
+**`validateSpace(path, requiredBytes)`:**
+- Verifica espacio disponible en disco
+- Considera overhead y margen de seguridad
+- Detecta cuotas y límites
+
+**`validatePermissions(path, required)`:**
+- Comprueba permisos de lectura/escritura/ejecución
+- Detecta permisos insuficientes antes de operar
+- Sugiere comandos para corregir permisos
+
+**`validateSchema(data, schema)`:**
+- Validación genérica de estructura de datos
+- Soporta JSON Schema, Zod, Yup, etc.
+- Mensajes de error detallados por campo
+
+**`validateSecurity(input)`:**
+- Validación especializada en seguridad
+- Detecta path traversal, inyecciones, etc.
+- Siempre se ejecuta, no se puede desactivar
+
+**`validateQuick(input)`:**
+- Alias para validación nivel rápido
+- Solo verificaciones esenciales
+
+**`validateDeep(input)`:**
+- Alias para validación nivel profundo
+- Todas las verificaciones posibles
+
+---
+
+### **Fase 3: Catálogo de Validadores**
+
+#### **3.1 Validadores de Rutas y Archivos:**
+
+**PathExistsValidator:**
+- Verifica que la ruta exista en el sistema
+- Mensaje de error: "La ruta '{path}' no existe"
+- Sugerencia: "Verifica que la ruta esté escrita correctamente"
+
+**PathTypeValidator:**
+- Verifica que la ruta sea del tipo esperado (archivo, directorio, symlink)
+- Detecta confusiones comunes (pasar archivo cuando se espera carpeta)
+- Mensaje: "Se esperaba un directorio pero '{path}' es un archivo"
+
+**PathPermissionsValidator:**
+- Verifica permisos de lectura/escritura/ejecución
+- Detecta permisos insuficientes antes de operar
+- Mensaje: "No tienes permisos de escritura en '{path}'"
+- Sugerencia: "Ejecuta 'chmod +w {path}' o contacta al administrador"
+
+**PathEmptyValidator:**
+- Detecta archivos vacíos (0 bytes)
+- Útil para evitar procesar archivos corruptos
+- Mensaje: "El archivo '{path}' está vacío"
+
+**PathCorruptedValidator:**
+- Detecta archivos corruptos mediante magic bytes o checksum
+- Verifica integridad básica del contenido
+- Mensaje: "El archivo '{path}' parece estar corrupto"
+
+**PathReadableValidator:**
+- Verifica que el archivo pueda leerse completamente
+- Detecta archivos bloqueados por otros procesos
+- Mensaje: "No se puede leer el archivo '{path}'"
+
+---
+
+#### **3.2 Validadores de Contenido:**
+
+**ExtensionValidator:**
+- Verifica que la extensión esté en la lista de soportadas
+- Case-insensitive por defecto
+- Mensaje: "La extensión '.xyz' no está soportada"
+- Sugerencia: "Extensiones soportadas: .jpg, .png, .pdf"
+
+**MimeTypeValidator:**
+- Verifica el tipo MIME real del archivo (no solo la extensión)
+- Detecta archivos con extensión incorrecta
+- Mensaje: "El archivo '{path}' tiene extensión .jpg pero es realmente un archivo PNG"
+
+**MagicBytesValidator:**
+- Verifica los bytes mágicos al inicio del archivo
+- Confirmación definitiva del tipo de archivo
+- Útil para detectar archivos renombrados incorrectamente
+
+**SizeValidator:**
+- Verifica que el tamaño esté dentro de límites aceptables
+- Soporta mínimo, máximo y rangos
+- Mensaje: "El archivo '{path}' es demasiado grande (500MB > límite 100MB)"
+
+**EncodingValidator:**
+- Detecta la codificación del archivo (UTF-8, UTF-16, etc.)
+- Verifica que sea la codificación esperada
+- Detecta BOM (Byte Order Mark)
+
+**IntegrityValidator:**
+- Verifica checksum/hash contra valor esperado
+- Útil para archivos descargados o transferidos
+- Soporta MD5, SHA-1, SHA-256, etc.
+
+---
+
+#### **3.3 Validadores de Configuración:**
+
+**OptionCompatibilityValidator:**
+- Detecta opciones que no pueden usarse juntas
+- Ejemplo: "--quiet y --verbose son mutuamente excluyentes"
+- Mensaje: "Las opciones '--opt1' y '--opt2' no pueden usarse juntas"
+
+**OptionDependencyValidator:**
+- Detecta opciones que requieren otras para funcionar
+- Ejemplo: "--compress requiere --format zip"
+- Mensaje: "La opción '--compress' requiere que también especifiques '--format'"
+
+**OptionValueValidator:**
+- Verifica que los valores de opciones sean válidos
+- Soporta rangos numéricos, enums, patrones regex
+- Mensaje: "El valor 'xyz' no es válido para la opción '--quality' (debe ser 1-100)"
+
+**RequiredOptionsValidator:**
+- Verifica que todas las opciones obligatorias estén presentes
+- Mensaje: "Falta la opción obligatoria '--output'"
+
+**DeprecatedOptionsValidator:**
+- Detecta opciones obsoletas
+- Sugiere alternativas modernas
+- Mensaje: "La opción '--old-flag' está obsoleta. Usa '--new-flag' en su lugar"
+
+---
+
+#### **3.4 Validadores de Sistema:**
+
+**DiskSpaceValidator:**
+- Verifica espacio disponible en disco
+- Considera tamaño de entrada + overhead + margen de seguridad
+- Mensaje: "Espacio insuficiente en disco (requerido: 5GB, disponible: 2GB)"
+- Sugerencia: "Libera espacio o cambia el directorio de salida"
+
+**DependencyValidator:**
+- Verifica que herramientas externas estén instaladas
+- Comprueba versiones compatibles
+- Mensaje: "Falta la dependencia 'ffmpeg' (requerida para conversión de video)"
+- Sugerencia: "Instálala con: apt install ffmpeg / brew install ffmpeg"
+
+**EnvironmentValidator:**
+- Verifica variables de entorno requeridas
+- Detecta configuraciones de sistema incompatibles
+- Mensaje: "La variable de entorno 'API_KEY' no está definida"
+
+**MemoryValidator:**
+- Estima memoria necesaria para la operación
+- Compara con memoria disponible
+- Sugiere ajustes si es insuficiente
+
+**NetworkValidator:**
+- Verifica conectividad a Internet si es requerida
+- Comprueba acceso a APIs externas
+- Detecta firewalls o proxies bloqueantes
+
+---
+
+#### **3.5 Validadores de Nombres y Patrones:**
+
+**FilenameValidator:**
+- Verifica que el nombre de archivo sea válido para el sistema operativo
+- Detecta caracteres prohibidos (/, \, :, *, ?, ", <, >, |)
+- Detecta nombres reservados (CON, PRN, AUX, NUL en Windows)
+- Mensaje: "El nombre de archivo '{name}' contiene caracteres inválidos"
+
+**PatternValidator:**
+- Verifica que un string coincida con un patrón regex
+- Útil para validación de formatos específicos
+- Mensaje: "El valor '{value}' no coincide con el patrón esperado"
+
+**UniquenessValidator:**
+- Detecta duplicados en listas de entrada
+- Útil para evitar procesar el mismo archivo dos veces
+- Mensaje: "El archivo '{path}' aparece múltiples veces en la lista de entrada"
+
+---
+
+### **Fase 4: Niveles de Validación**
+
+#### **4.1 Nivel Rápido (Fast):**
+
+**Objetivo:** Validación mínima para operaciones simples o tiempo crítico
+
+**Validaciones incluidas:**
+- Existencia de ruta
+- Tipo básico (archivo vs directorio)
+- Extensiones soportadas
+- Opciones obligatorias presentes
+- Validaciones de seguridad críticas (path traversal)
+
+**Tiempo estimado:** <100ms para 1000 archivos
+
+**Uso recomendado:**
+- Operaciones simples
+- Sistemas con muchos archivos
+- Cuando el usuario tiene prisa
+- Validaciones repetitivas (caché)
+
+**Ejemplo:**
+```javascript
+const result = await validate(input, schema, { level: 'fast' });
+// Solo verifica lo esencial
+```
+
+---
+
+#### **4.2 Nivel Estándar (Standard) - Por defecto:**
+
+**Objetivo:** Balance entre exhaustividad y velocidad
+
+**Validaciones incluidas:**
+- Todo lo del nivel rápido, más:
+- Permisos de lectura/escritura
+- Archivos vacíos
+- Compatibilidad de opciones
+- Espacio en disco (estimación básica)
+- Versiones de dependencias
+- Detección de duplicados
+
+**Tiempo estimado:** 1-5s para 1000 archivos
+
+**Uso recomendado:**
+- Operaciones normales
+- Producción estándar
+- La mayoría de los casos de uso
+
+**Ejemplo:**
+```javascript
+const result = await validate(input, schema, { level: 'standard' });
+// Balance óptimo
+```
+
+---
+
+#### **4.3 Nivel Profundo (Deep):**
+
+**Objetivo:** Máxima exhaustividad para operaciones críticas
+
+**Validaciones incluidas:**
+- Todo lo del nivel estándar, más:
+- Verificación completa de integridad (hash completo)
+- Magic bytes de todos los archivos
+- Análisis detallado de permisos
+- Estimación precisa de memoria
+- Validación de codificación
+- Análisis de seguridad exhaustivo
+- Prueba de escritura real (dry-run)
+- Validación de todas las dependencias en profundidad
+
+**Tiempo estimado:** 10-60s para 1000 archivos
+
+**Uso recomendado:**
+- Operaciones críticas (producción, finanzas, salud)
+- Archivos valiosos o irremplazables
+- Primera ejecución en sistema nuevo
+- Cuando se sospecha de problemas
+- Migraciones importantes
+
+**Ejemplo:**
+```javascript
+const result = await validate(input, schema, { level: 'deep' });
+// Máxima seguridad
+```
+
+---
+
+#### **4.4 Nivel Inteligente (Smart/Auto):**
+
+**Objetivo:** Seleccionar automáticamente el nivel óptimo
+
+**Algoritmo:**
+```
+Si operación es destructiva (borrar, sobrescribir):
+  → Nivel profundo
+
+Si archivos son críticos (documentos, fotos personales):
+  → Nivel profundo
+
+Si operación es reversible:
+  → Nivel estándar
+
+Si sistema es conocido y confiable:
+  → Nivel rápido
+
+Si es primera ejecución:
+  → Nivel profundo
+
+Si hay caché válido:
+  → Nivel rápido
+```
+
+---
+
+### **Fase 5: Sistema de Seguridad**
+
+#### **5.1 Protección contra Path Traversal:**
+
+**Detección:**
+```
+Entrada peligrosa: "../../etc/passwd"
+Entrada peligrosa: "..\..\windows\system32"
+Entrada peligrosa: "/var/www/../../secret"
+Entrada peligrosa: "foo/./../bar"
+Entrada peligrosa: "foo%2F..%2F..%2Fetc"
+```
+
+**Prevención:**
+- Normalización de rutas (resolver `.`, `..`, symlinks)
+- Verificación de que la ruta normalizada está dentro del directorio permitido
+- Rechazo de cualquier ruta que escape del sandbox
+- Logging de intentos sospechosos
+
+**Configuración:**
+```json
+{
+  "security": {
+    "allowedRoots": ["/home/user/projects", "/tmp/app"],
+    "blockPathTraversal": true,
+    "blockSymlinkEscape": true,
+    "logSuspiciousAttempts": true
+  }
+}
+```
+
+---
+
+#### **5.2 Protección contra Symlink Attacks:**
+
+**Detección:**
+- Symlinks que apuntan fuera del directorio permitido
+- Symlinks circulares
+- Symlinks rotos
+- Symlinks a archivos del sistema
+
+**Prevención:**
+- Resolución completa de symlinks antes de operar
+- Verificación del destino real
+- Opción de ignorar todos los symlinks
+- Opción de solo permitir symlinks dentro del sandbox
+
+---
+
+#### **5.3 Protección contra TOCTOU (Time-of-Check-Time-of-Use):**
+
+**Problema:**
+- Entre la validación y el uso, el archivo puede cambiar
+- Atacante puede reemplazar archivo después de validación
+
+**Prevención:**
+- Usar file descriptors en lugar de paths cuando sea posible
+- Verificar inode antes y después de operaciones críticas
+- Locks de archivo para operaciones atómicas
+- Re-validación antes de operaciones destructivas
+
+---
+
+#### **5.4 Protección contra Sobreescrituras:**
+
+**Detección:**
+- Archivo de salida ya existe
+- Archivo de salida es el mismo que el de entrada
+- Archivo de salida está en directorio del sistema
+- Archivo de salida es crítico (.bashrc, .ssh/, etc.)
+
+**Prevención:**
+- Lista de rutas protegidas (no sobrescribibles)
+- Confirmación explícita para sobrescribir
+- Backup automático antes de sobrescribir
+- Opción `--no-overwrite` para prevenir accidentalmente
+
+**Lista de rutas protegidas por defecto:**
+```
+/, /etc, /bin, /sbin, /usr, /var, /boot, /lib
+C:\, C:\Windows, C:\Program Files
+~/.ssh, ~/.gnupg, ~/.config
+.bashrc, .zshrc, .profile
+```
+
+---
+
+#### **5.5 Protección contra Inyecciones:**
+
+**Detección:**
+- Nombres de archivo con caracteres de shell
+- Comandos inyectados en nombres
+- Secuencias de escape peligrosas
+- Caracteres de control
+
+**Prevención:**
+- Sanitización de todos los nombres de archivo
+- Uso de arrays en lugar de strings para comandos
+- Escapado automático de caracteres especiales
+- Validación estricta de caracteres permitidos
+
+---
+
+#### **5.6 Sandbox de Rutas:**
+
+**Concepto:**
+- Definir directorios permitidos explícitamente
+- Cualquier operación fuera del sandbox es bloqueada
+- El sandbox se aplica a input, output y temporales
+
+**Configuración:**
+```json
+{
+  "sandbox": {
+    "input": "/home/user/projects/myapp/input",
+    "output": "/home/user/projects/myapp/output",
+    "temp": "/tmp/myapp-12345",
+    "strict": true
+  }
+}
+```
+
+---
+
+### **Fase 6: Salida Estructurada de Validación**
+
+#### **6.1 Estructura ValidationResult:**
+
+```json
+{
+  "valid": false,
+  "level": "standard",
+  "duration": 234,
+  "timestamp": "2026-10-27T14:32:45Z",
+  
+  "summary": {
+    "total": 15,
+    "passed": 10,
+    "failed": 3,
+    "warnings": 2,
+    "info": 0
+  },
+  
+  "errors": [
+    {
+      "code": "PATH_NOT_EXISTS",
+      "severity": "fatal",
+      "field": "input.path",
+      "value": "/ruta/inexistente",
+      "message": "La ruta '/ruta/inexistente' no existe",
+      "suggestion": "Verifica que la ruta esté escrita correctamente y que el archivo exista",
+      "helpUrl": "https://docs.app.com/errors/PATH_NOT_EXISTS",
+      "fixable": true,
+      "autoFix": null
+    },
+    {
+      "code": "PERMISSION_DENIED",
+      "severity": "error",
+      "field": "output.path",
+      "value": "/root/output",
+      "message": "No tienes permisos de escritura en '/root/output'",
+      "suggestion": "Usa un directorio diferente o ejecuta 'sudo chmod +w /root/output'",
+      "helpUrl": "https://docs.app.com/errors/PERMISSION_DENIED",
+      "fixable": true,
+      "autoFix": {
+        "command": "chmod +w /root/output",
+        "requiresConfirmation": true
+      }
+    }
+  ],
+  
+  "warnings": [
+    {
+      "code": "LOW_DISK_SPACE",
+      "severity": "warning",
+      "field": "output.diskSpace",
+      "value": "500MB",
+      "message": "Espacio en disco bajo (500MB disponibles, se estiman necesarios 450MB)",
+      "suggestion": "Libera espacio o cambia el directorio de salida",
+      "fixable": false
+    }
+  ],
+  
+  "info": [
+    {
+      "code": "DEPRECATED_OPTION",
+      "severity": "info",
+      "field": "options.oldFlag",
+      "value": true,
+      "message": "La opción '--old-flag' está obsoleta",
+      "suggestion": "Usa '--new-flag' en su lugar",
+      "fixable": true,
+      "autoFix": {
+        "replacement": { "options.newFlag": true }
+      }
+    }
+  ],
+  
+  "validatedInputs": {
+    "input.path": { "valid": false, "value": "/ruta/inexistente" },
+    "output.path": { "valid": false, "value": "/root/output" },
+    "options.format": { "valid": true, "value": "pdf" }
+  },
+  
+  "security": {
+    "threatsDetected": 0,
+    "sandboxViolations": 0,
+    "suspiciousPatterns": 0
+  },
+  
+  "metadata": {
+    "validatorsRun": 15,
+    "validatorsSkipped": 2,
+    "cacheUsed": false,
+    "levelApplied": "standard"
+  }
+}
+```
+
+---
+
+#### **6.2 Métodos de Consulta del Resultado:**
+
+**`result.isValid()`:**
+- Retorna true si no hay errores fatales
+
+**`result.hasErrors()`:**
+- Retorna true si hay errores de cualquier severidad
+
+**`result.hasWarnings()`:**
+- Retorna true si hay advertencias
+
+**`result.getFatalErrors()`:**
+- Retorna solo errores que bloquean la ejecución
+
+**`result.getFixableErrors()`:**
+- Retorna errores que pueden auto-corregirse
+
+**`result.applyAutoFixes()`:**
+- Aplica automáticamente las correcciones sugeridas
+
+**`result.formatHuman()`:**
+- Retorna mensaje legible para humanos
+
+**`result.formatJSON()`:**
+- Retorna JSON completo para procesamiento
+
+**`result.formatMarkdown()`:**
+- Retorna reporte en formato Markdown
+
+---
+
+### **Fase 7: Internacionalización (i18n)**
+
+#### **7.1 Sistema de Traducción:**
+
+**Estructura de archivos de idioma:**
+```
+locales/
+  ├── es.json
+  ├── en.json
+  ├── fr.json
+  ├── de.json
+  ├── pt.json
+  └── ja.json
+```
+
+**Ejemplo de archivo es.json:**
+```json
+{
+  "validation": {
+    "errors": {
+      "PATH_NOT_EXISTS": "La ruta '{path}' no existe",
+      "PERMISSION_DENIED": "No tienes permisos de {permission} en '{path}'",
+      "INVALID_EXTENSION": "La extensión '.{extension}' no está soportada"
+    },
+    "suggestions": {
+      "CHECK_PATH": "Verifica que la ruta esté escrita correctamente",
+      "CHANGE_PERMISSIONS": "Usa 'chmod' para cambiar los permisos",
+      "USE_SUPPORTED": "Extensiones soportadas: {extensions}"
+    },
+    "levels": {
+      "fast": "rápido",
+      "standard": "estándar",
+      "deep": "profundo"
+    }
+  }
+}
+```
+
+---
+
+#### **7.2 Detección Automática de Idioma:**
+
+**Fuentes de detección (en orden de prioridad):**
+1. Variable de entorno `LANG` o `LC_ALL`
+2. Variable de entorno `LANGUAGE`
+3. Configuración de la aplicación
+4. Idioma del sistema operativo
+5. Inglés como fallback
+
+**Override manual:**
+```javascript
+const result = await validate(input, schema, {
+  locale: 'es-MX'
+});
+```
+
+---
+
+#### **7.3 Características de i18n:**
+
+**Placeholders dinámicos:**
+- `{path}`, `{extension}`, `{size}`, etc.
+- Reemplazados automáticamente con valores reales
+
+**Pluralización:**
+- Soporte para singular/plural en diferentes idiomas
+- Ejemplo: "1 archivo" vs "2 archivos"
+
+**Formato de números:**
+- Separadores de miles según locale
+- Formato de fechas y horas
+- Formato de tamaños (MB, GB)
+
+**Dirección de texto:**
+- Soporte para RTL (Right-to-Left) en árabe, hebreo
+- Ajuste automático de layout
+
+---
+
+### **Fase 8: Validación por Fases**
+
+#### **8.1 Fase Pre-Ejecución:**
+
+**Cuándo se ejecuta:**
+- Antes de comenzar cualquier operación costosa
+- Al inicio del comando/app
+
+**Qué valida:**
+- Todas las entradas del usuario
+- Configuración completa
+- Dependencias del sistema
+- Espacio en disco
+- Permisos necesarios
+
+**Comportamiento:**
+- Si falla → abortar con mensaje claro
+- Si hay warnings → mostrar y continuar
+- Si pasa → proceder a la operación
+
+---
+
+#### **8.2 Fase Durante-Ejecución:**
+
+**Cuándo se ejecuta:**
+- Antes de cada operación individual
+- En cada iteración de procesamiento por lotes
+
+**Qué valida:**
+- Archivo específico a procesar
+- Estado actual del sistema
+- Recursos disponibles
+- Condiciones cambiantes
+
+**Comportamiento:**
+- Si falla → saltar archivo, continuar con el resto
+- Si hay warnings → loggear y continuar
+- Si pasa → procesar archivo
+
+---
+
+#### **8.3 Fase Post-Ejecución:**
+
+**Cuándo se ejecuta:**
+- Después de completar la operación
+- Antes de reportar éxito
+
+**Qué valida:**
+- Integridad de los resultados generados
+- Archivos de salida creados correctamente
+- Limpieza de temporales
+- Consistencia del estado final
+
+**Comportamiento:**
+- Si falla → reportar error parcial
+- Si hay warnings → informar al usuario
+- Si pasa → confirmar éxito
+
+---
+
+#### **8.4 Validación Incremental:**
+
+**Concepto:**
+- No re-validar todo en cada ejecución
+- Cache de resultados de validación
+- Solo re-validar lo que cambió
+
+**Implementación:**
+- Hash de inputs + configuración
+- Si hash coincide → usar resultado cacheado
+- Si hash difiere → re-validar
+
+---
+
+### **Fase 9: Integración con Otros Skills**
+
+#### **9.1 Relación con Bootstrap Inteligente:**
+
+**Durante el bootstrap:**
+- Validar que el entorno cumple requisitos
+- Verificar dependencias antes de instalar
+- Comprobar espacio en disco para instalación
+- Validar permisos en directorios de instalación
+
+**Después del bootstrap:**
+- Validar que la instalación fue exitosa
+- Verificar que todos los archivos están correctos
+- Confirmar que la app puede ejecutarse
+
+---
+
+#### **9.2 Relación con Menús Adaptativos:**
+
+**En el menú:**
+- Validar opciones seleccionadas antes de ejecutar
+- Deshabilitar opciones inválidas
+- Mostrar warnings en tiempo real
+- Sugerir correcciones antes de confirmar
+
+---
+
+#### **9.3 Relación con Progress Orchestrator:**
+
+**Integración nativa:**
+- Mostrar progreso de validación
+- Reportar errores durante la validación
+- Usar mismo estilo visual que el resto de la app
+
+---
+
+#### **9.4 Relación con SmartScanner:**
+
+**Flujo integrado:**
+```
+1. SmartScanner descubre archivos
+2. ValidationOrchestrator valida cada archivo
+3. Solo archivos válidos pasan al procesamiento
+```
+
+**Optimización:**
+- Scanner puede pre-filtrar archivos inválidos
+- Validación puede usar metadatos del scanner
+- Evitar validar dos veces lo mismo
+
+---
+
+#### **9.5 Relación con IncrementalCache:**
+
+**Integración:**
+- Cache puede almacenar resultados de validación
+- Evitar re-validar archivos sin cambios
+- Invalidar caché de validación cuando cambien reglas
+
+---
+
+#### **9.6 Relación con ParallelOrchestrator:**
+
+**Validación paralela:**
+- Validar múltiples archivos concurrentemente
+- Pool de validadores para máximo rendimiento
+- Agregar resultados de validaciones paralelas
+
+---
+
+#### **9.7 Relación con Gestión de Directorios:**
+
+**Validación de directorios:**
+- Verificar que input/output existen
+- Crear directorios faltantes si es seguro
+- Validar permisos antes de crear
+
+---
+
+#### **9.8 Relación con Banners:**
+
+**Banner informativo:**
+- Mostrar resumen de validación en el banner
+- "✅ 150 archivos válidos | ⚠️ 3 warnings | ❌ 2 errores"
+
+---
+
+### **Fase 10: Implementación por Lenguaje**
+
+#### **Node.js:**
+```javascript
+// Librerías recomendadas:
+// - joi (validación de schemas)
+// - zod (validación tipada)
+// - yup (validación de formularios)
+// - ajv (JSON Schema validator)
+// - validator (validación de strings)
+// - fs-extra (operaciones de FS con validación)
+```
+
+#### **Python:**
+```python
+# Librerías recomendadas:
+# - pydantic (validación de datos moderna)
+# - cerberus (validación de dictionaries)
+# - marshmallow (serialización + validación)
+# - voluptuous (validación flexible)
+# - schema (validación simple)
+# - pathlib (manejo de paths con validación)
+```
+
+#### **Rust:**
+```rust
+// Crates recomendados:
+// - validator (validación de structs)
+// - serde (serialización con validación)
+// - thiserror (manejo de errores tipado)
+// - anyhow (errores flexibles)
+// - nom (parsing con validación)
+```
+
+#### **Go:**
+```go
+// Paquetes recomendados:
+// - go-playground/validator (validación de structs)
+// - asaskevich/govalidator (validación de strings)
+// - go-ozzo/ozzo-validation (validación flexible)
+```
+
+#### **Bash/Shell:**
+```bash
+# Herramientas recomendadas:
+# - test/[ ] (validación básica)
+# - jq (validación de JSON)
+# - yq (validación de YAML)
+# - shellcheck (validación de scripts)
+```
+
+---
+
+### **Fase 11: Casos de Uso y Ejemplos**
+
+#### **Ejemplo 1: Conversor de Imágenes**
+
+```javascript
+const schema = {
+  input: {
+    path: { type: 'directory', exists: true, readable: true },
+    extensions: ['jpg', 'png', 'webp']
+  },
+  output: {
+    path: { type: 'directory', writable: true, notSameAs: 'input.path' },
+    format: { enum: ['pdf', 'zip', 'directory'] }
+  },
+  options: {
+    quality: { type: 'number', min: 1, max: 100 },
+    compress: { type: 'boolean' }
+  }
+};
+
+const result = await validate(userInput, schema, {
+  level: 'standard',
+  security: { sandbox: true }
+});
+
+if (!result.isValid()) {
+  console.error(result.formatHuman());
+  process.exit(1);
+}
+```
+
+---
+
+#### **Ejemplo 2: Descargador de Archivos**
+
+```javascript
+const schema = {
+  urls: {
+    type: 'array',
+    minItems: 1,
+    items: { type: 'url', protocol: ['http', 'https'] }
+  },
+  output: {
+    path: { type: 'directory', writable: true },
+    diskSpace: { minBytes: 'estimated' }
+  },
+  network: {
+    connectivity: true,
+    timeout: 30000
+  }
+};
+
+const result = await validate(userInput, schema, {
+  level: 'deep',
+  locale: 'es'
+});
+```
+
+---
+
+#### **Ejemplo 3: Compilador/Build System**
+
+```javascript
+const schema = {
+  source: {
+    path: { type: 'directory', exists: true },
+    files: { pattern: '**/*.{c,cpp,h,hpp}' }
+  },
+  dependencies: {
+    gcc: { minVersion: '9.0.0' },
+    make: { required: true }
+  },
+  output: {
+    path: { type: 'directory', writable: true },
+    diskSpace: { minBytes: '1GB' }
+  }
+};
+
+const result = await validate(userInput, schema, {
+  level: 'deep',
+  phases: ['pre-execution', 'post-execution']
+});
+```
+
+---
+
+### **Fase 12: Beneficios del Sistema**
+
+✅ **Universal:** Aplica a cualquier tipo de entrada en cualquier aplicación  
+✅ **Reutilizable:** Una vez implementado, sirve para múltiples aplicaciones  
+✅ **Inteligente:** Detecta automáticamente el nivel de validación óptimo  
+✅ **Configurable:** Cada aspecto puede personalizarse según necesidades  
+✅ **Robusto:** Maneja todos los casos edge y errores posibles  
+✅ **Seguro:** Previene ataques, path traversal, sobreescrituras peligrosas  
+✅ **Internacionalizado:** Mensajes en múltiples idiomas  
+✅ **Estructurado:** Salida rica con errores, warnings, sugerencias y auto-fix  
+✅ **Por fases:** Valida antes, durante y después de las operaciones  
+✅ **Integrable:** Trabaja con todos los otros skills del ecosistema  
+✅ **Multiplataforma:** Funciona en Windows, Linux, macOS  
+✅ **Multi-lenguaje:** Implementaciones para Node.js, Python, Rust, Go, Bash  
+✅ **Rápido:** Niveles de validación para diferentes escenarios  
+✅ **Cacheable:** Evita re-validar innecesariamente  
+✅ **Extensible:** Fácil agregar validadores personalizados  
+✅ **Transparente:** El usuario entiende exactamente qué falló y cómo corregirlo  
+✅ **Profesional:** Mensajes claros, sugerencias útiles, links a documentación  
+✅ **Auto-fix:** Algunas correcciones pueden aplicarse automáticamente  
+
+---
+
+### **Conclusión:**
+
+Esta skill transforma la validación de entradas de una tarea tediosa y propensa a errores en un sistema inteligente, robusto y reutilizable. El ValidationOrchestrator Universal puede integrarse en cualquier aplicación que reciba entradas del usuario, manteniendo la misma interfaz y comportamiento aunque cambie el caso de uso específico. Se integra perfectamente con los otros skills (Bootstrap, Menús Adaptativos, Banners, Progress Orchestrator, SmartScanner, IncrementalCache, ParallelOrchestrator, Gestión de Directorios) para crear aplicaciones CLI completas, profesionales y con excelente experiencia de usuario.
+
+El sistema es lo suficientemente flexible para usarse en conversores de imágenes, descargadores de archivos, compiladores, procesadores de datos, analizadores de documentos, sistemas de build, migradores, sincronizadores, y cualquier otra aplicación que necesite "verificar antes de actuar". La combinación de múltiples niveles de validación, sistema de seguridad estricto, internacionalización completa, validación por fases y salida estructurada con sugerencias de corrección lo convierte en una solución enterprise-grade para validación que previene errores antes de que ocurran y guía al usuario hacia el éxito.

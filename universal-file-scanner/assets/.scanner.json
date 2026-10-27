@@ -1,0 +1,51 @@
+{
+  "version": "1.0.0",
+  "defaults": {
+    "recursion": { "maxDepth": null },
+    "filtering": {
+      "excludePatterns": ["**/node_modules/**", "**/.git/**"],
+      "excludeTempFiles": true,
+      "includeHidden": false
+    },
+    "performance": { "useCache": true, "parallel": true, "maxWorkers": 4 },
+    "progress": { "showProgress": true, "style": "auto" },
+    "output": { "groupByFolder": true, "sortBy": "name", "sortOrder": "asc", "includeStats": true }
+  },
+  "presets": {
+    "imagenes": {
+      "filtering": {
+        "includeExtensions": ["jpg", "png", "webp", "gif", "bmp"]
+      }
+    },
+    "documentos": {
+      "filtering": {
+        "includeExtensions": ["pdf", "doc", "docx", "txt", "md"]
+      }
+    },
+    "rapido": {
+      "duplicates": { "enabled": false },
+      "output": { "includeStats": false, "includeMetadata": false },
+      "performance": { "useCache": true }
+    },
+    "completo": {
+      "duplicates": { "enabled": true, "strategy": "full" },
+      "output": { "includeStats": true, "includeMetadata": true },
+      "performance": { "useCache": false }
+    },
+    "produccion": {
+      "duplicates": { "enabled": true, "strategy": "balanced" },
+      "performance": { "useCache": true, "cacheTTL": 3600 },
+      "progress": { "showProgress": true }
+    },
+    "minimo": {
+      "duplicates": { "enabled": false },
+      "output": { "includeStats": false },
+      "progress": { "showProgress": false }
+    }
+  },
+  "cache": {
+    "enabled": true,
+    "location": ".cache/scanner",
+    "maxAge": 86400
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "version": "1.0.0",
+  "limits": {
+    "maxMemoryMB": 2048,
+    "maxSingleObjectMB": 500,
+    "maxConcurrentFiles": 10,
+    "maxBatchSize": 100,
+    "reservedForSystemMB": 256,
+    "softLimitPercent": 80,
+    "hardLimitPercent": 95
+  },
+  "strategy": {
+    "mode": "auto",
+    "preferSpeed": false,
+    "chunkSizeMB": 10,
+    "streamBufferSizeKB": 64,
+    "mmapEnabled": true,
+    "tempFileEnabled": true,
+    "tempDir": null
+  },
+  "bufferPool": {
+    "enabled": true,
+    "smallSize": 4096,
+    "mediumSize": 65536,
+    "largeSize": 1048576,
+    "maxBuffers": 100,
+    "reuseEnabled": true
+  },
+  "pressure": {
+    "monitoring": true,
+    "checkInterval": 1000,
+    "gcOnWarning": true,
+    "reduceWorkersOnWarning": true,
+    "pauseOnCritical": true,
+    "abortOnEmergency": true
+  },
+  "cleanup": {
+    "autoRelease": true,
+    "releaseAfterMs": 5000,
+    "tempFileCleanup": true,
+    "poolCleanupOnIdle": true
+  },
+  "statistics": {
+    "enabled": true,
+    "trackPerOperation": true,
+    "exportInterval": 60000,
+    "exportPath": null
+  }
+}

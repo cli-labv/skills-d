@@ -1,0 +1,899 @@
+## Skill: Caché Incremental Universal - Sistema de Optimización de Reprocesamiento Inteligente
+
+**Descripción General:**
+Implementar un sistema universal, reutilizable e inteligente de caché incremental que evite que una aplicación vuelva a procesar archivos que no han cambiado desde la última ejecución, mediante un almacenamiento estructurado de metadatos que registre la ruta, tamaño, fecha de modificación, cantidad de elementos, hash opcional, estado del procesamiento, resultado generado y versión de la configuración utilizada. Este sistema debe comparar esos datos durante cada nueva ejecución y clasificar los elementos como **Nuevo**, **Modificado**, **SinCambios**, **Eliminado** o **RequiereReprocesamiento**, ofreciendo diferentes niveles de validación desde una comprobación rápida por tamaño y fecha hasta una comprobación completa mediante hash, además de permitir invalidación manual, expiración temporal, detección de cambios en opciones de procesamiento y recuperación ante corrupción, siendo independiente del formato final para utilizarse en conversión de imágenes, generación de reportes, compilación, análisis de documentos, sincronización y procesamiento de grandes colecciones, integrándose perfectamente con el **SmartScanner** y el **Progress Orchestrator**.
+
+---
+
+### **Fase 1: Arquitectura del Sistema de Caché**
+
+#### **1.1 Componentes Principales:**
+
+**IncrementalCacheManager (Gestor Principal):**
+- Punto de entrada único mediante interfaz `cache(path, options)`
+- Coordina todos los componentes del sistema
+- Gestiona el ciclo de vida completo del caché
+- Decide qué elementos procesar y cuáles omitir
+- Devuelve clasificación completa de elementos
+
+**MetadataStore (Almacén de Metadatos):**
+- Persiste metadatos de elementos procesados
+- Almacena: ruta, tamaño, mtime, hash, estado, resultado, versión config
+- Soporta múltiples formatos (JSON, SQLite, binario)
+- Implementa transacciones atómicas para evitar corrupción
+- Permite migración entre versiones del esquema
+
+**ChangeDetector (Detector de Cambios):**
+- Compara estado actual con caché almacenado
+- Clasifica cada elemento en una de las 5 categorías
+- Soporta múltiples estrategias de comparación
+- Detecta cambios en configuración de procesamiento
+- Identifica resultados obsoletos
+
+**InvalidationEngine (Motor de Invalidación):**
+- Gestiona invalidación manual y automática
+- Soporta invalidación por patrón, ruta, tipo o global
+- Implementa TTL (Time-To-Live) por elemento o global
+- Detecta cambios en versión de configuración
+- Permite invalidación selectiva sin perder todo el caché
+
+**RecoveryManager (Gestor de Recuperación):**
+- Detecta archivos de caché corruptos
+- Intenta recuperar datos válidos
+- Crea backups automáticos antes de escribir
+- Implementa versionado del archivo de caché
+- Permite reconstrucción desde cero si es necesario
+
+**StatisticsTracker (Rastreador de Estadísticas):**
+- Calcula tiempo ahorrado por el caché
+- Cuenta elementos omitidos vs procesados
+- Mide efectividad del caché (hit rate)
+- Reporta tamaño del caché y crecimiento
+- Identifica elementos más frecuentemente reprocesados
+
+---
+
+### **Fase 2: Clasificación de Elementos**
+
+#### **2.1 Las 5 Categorías de Estado:**
+
+**🆕 Nuevo (New):**
+- Archivo existe en sistema pero no en caché
+- Nunca ha sido procesado
+- Acción: procesar y agregar al caché
+
+**✏️ Modificado (Modified):**
+- Archivo existe en ambos pero cambió (tamaño, mtime o hash)
+- Resultado anterior puede estar obsoleto
+- Acción: reprocesar y actualizar caché
+
+**✅ SinCambios (Unchanged):**
+- Archivo idéntico al del caché
+- Resultado anterior sigue siendo válido
+- Acción: omitir procesamiento, reusar resultado
+
+**❌ Eliminado (Deleted):**
+- Archivo estaba en caché pero ya no existe
+- Resultado anterior puede ser huérfano
+- Acción: limpiar caché y opcionalmente resultado
+
+**🔄 RequiereReprocesamiento (RequiresReprocessing):**
+- Archivo no cambió pero la configuración sí
+- Resultado anterior generado con configuración diferente
+- Acción: reprocesar con nueva configuración
+
+#### **2.2 Algoritmo de Clasificación:**
+
+```
+Para cada archivo en el sistema:
+  1. ¿Existe en caché?
+     NO → clasificar como "Nuevo"
+     SÍ → continuar
+  
+  2. ¿Caché expiró (TTL)?
+     SÍ → clasificar como "RequiereReprocesamiento"
+     NO → continuar
+  
+  3. ¿Versión de configuración cambió?
+     SÍ → clasificar como "RequiereReprocesamiento"
+     NO → continuar
+  
+  4. Comparar metadatos según nivel de validación:
+     - Nivel rápido: tamaño + mtime
+     - Nivel medio: tamaño + mtime + hash parcial
+     - Nivel completo: hash completo
+     ¿Coinciden?
+     NO → clasificar como "Modificado"
+     SÍ → clasificar como "SinCambios"
+
+Para cada archivo en caché que no está en el sistema:
+  → clasificar como "Eliminado"
+```
+
+---
+
+### **Fase 3: Estructura de Datos del Caché**
+
+#### **3.1 Esquema de Metadatos por Elemento:**
+
+```json
+{
+  "version": "1.0.0",
+  "schemaVersion": 2,
+  "createdAt": "2026-10-27T10:00:00Z",
+  "updatedAt": "2026-10-27T14:32:45Z",
+  "configHash": "a1b2c3d4...",
+  "configVersion": "2.1.0",
+  
+  "entries": {
+    "/ruta/imagen1.jpg": {
+      "path": "/ruta/imagen1.jpg",
+      "size": 1048576,
+      "modifiedAt": "2026-10-20T14:22:00Z",
+      "createdAt": "2026-01-15T08:30:00Z",
+      "hash": {
+        "algorithm": "sha256",
+        "value": "abc123...",
+        "partial": "def456...",
+        "partialSize": 4096
+      },
+      "status": "processed",
+      "processedAt": "2026-10-27T14:30:00Z",
+      "processingTime": 234,
+      "result": {
+        "outputPath": "/output/imagen1.pdf",
+        "outputSize": 524288,
+        "outputHash": "xyz789...",
+        "metadata": {
+          "pages": 1,
+          "format": "pdf",
+          "quality": 95
+        }
+      },
+      "configUsed": {
+        "version": "2.1.0",
+        "hash": "cfg123...",
+        "options": {
+          "quality": 95,
+          "format": "pdf"
+        }
+      },
+      "ttl": null,
+      "expiresAt": null,
+      "accessCount": 5,
+      "lastAccessed": "2026-10-27T14:32:45Z"
+    }
+  },
+  
+  "statistics": {
+    "totalEntries": 1234,
+    "totalSize": 5368709120,
+    "cacheSize": 2097152,
+    "hitRate": 0.87,
+    "averageProcessingTime": 234,
+    "totalTimeSaved": 287654
+  }
+}
+```
+
+#### **3.2 Formatos de Almacenamiento Soportados:**
+
+**JSON (por defecto):**
+- Legible y debuggable
+- Bueno para cachés pequeños (<10,000 elementos)
+- Fácil de inspeccionar manualmente
+
+**SQLite (para cachés grandes):**
+- Consultas eficientes
+- Transacciones atómicas
+- Bueno para >10,000 elementos
+- Soporte para índices
+
+**Binario (alto rendimiento):**
+- Máxima velocidad de lectura/escritura
+- Menor uso de disco
+- Para aplicaciones de alto rendimiento
+- Requiere serialización/deserialización
+
+**Híbrido (JSON + archivos auxiliares):**
+- Metadatos principales en JSON
+- Hashes grandes en archivos separados
+- Balance entre legibilidad y rendimiento
+
+---
+
+### **Fase 4: Niveles de Validación**
+
+#### **4.1 Nivel 1: Rápido (Fast)**
+
+**Criterios:**
+- Tamaño del archivo
+- Fecha de modificación (mtime)
+
+**Ventajas:**
+- Extremadamente rápido (sin leer contenido)
+- Ideal para sistemas con millones de archivos
+- Bajo uso de CPU
+
+**Desventajas:**
+- Puede fallar si el archivo se modifica pero mantiene tamaño y mtime
+- No detecta cambios de contenido sutiles
+
+**Uso recomendado:**
+- Desarrollo local
+- Sistemas con muchos archivos
+- Cuando la velocidad es crítica
+
+---
+
+#### **4.2 Nivel 2: Equilibrado (Balanced)**
+
+**Criterios:**
+- Tamaño del archivo
+- Fecha de modificación
+- Hash parcial (primeros 4KB + últimos 4KB)
+
+**Ventajas:**
+- Rápido pero más preciso que nivel 1
+- Detecta la mayoría de cambios reales
+- Balance óptimo velocidad/precisión
+
+**Desventajas:**
+- Requiere lectura parcial del archivo
+- Ligeramente más lento que nivel 1
+
+**Uso recomendado:**
+- Producción estándar
+- Aplicaciones de uso frecuente
+- Cuando se necesita buen balance
+
+---
+
+#### **4.3 Nivel 3: Completo (Full)**
+
+**Criterios:**
+- Hash completo del archivo (SHA-256, MD5, etc.)
+
+**Ventajas:**
+- Máxima precisión
+- Detecta cualquier cambio de contenido
+- Ideal para verificación crítica
+
+**Desventajas:**
+- Lento (debe leer archivo completo)
+- Alto uso de CPU
+- No escalable para sistemas grandes
+
+**Uso recomendado:**
+- Aplicaciones críticas (finanzas, salud)
+- Verificación de integridad
+- Cuando la precisión es más importante que la velocidad
+
+---
+
+#### **4.4 Nivel 4: Inteligente (Smart/Auto)**
+
+**Comportamiento:**
+- Analiza contexto automáticamente
+- Selecciona nivel según:
+  - Cantidad de archivos
+  - Tamaño promedio
+  - Historial de cambios
+  - Configuración previa
+
+**Algoritmo:**
+```
+Si <100 archivos → Nivel 3 (completo)
+Si 100-1000 archivos → Nivel 2 (equilibrado)
+Si >1000 archivos → Nivel 1 (rápido)
+
+Si archivos son pequeños (<1MB) → Nivel 3
+Si archivos son grandes (>100MB) → Nivel 1
+
+Si historial muestra muchos cambios → Nivel 2 o 3
+Si historial muestra estabilidad → Nivel 1
+```
+
+---
+
+### **Fase 5: Detección de Cambios en Configuración**
+
+#### **5.1 Sistema de Versionado de Configuración:**
+
+**Hash de Configuración:**
+- Genera hash de todas las opciones de procesamiento
+- Incluye: algoritmos, parámetros, presets, flags
+- Cambia automáticamente cuando cualquier opción cambia
+
+**Comparación de Configuraciones:**
+```
+Config actual hash: a1b2c3d4...
+Config en caché:    e5f6g7h8...
+→ Difieren → RequiereReprocesamiento
+```
+
+**Detección Granular de Cambios:**
+- Identifica qué opción específica cambió
+- Permite invalidación selectiva
+- Ejemplo: "Solo reprocesar si cambió 'quality'"
+
+**Configuraciones que Invalidan Caché:**
+- Algoritmo de procesamiento
+- Parámetros del algoritmo
+- Formato de salida
+- Calidad/compresión
+- Filtros aplicados
+- Orden de operaciones
+
+**Configuraciones que NO Invalidan Caché:**
+- Opciones de visualización
+- Rutas de output (si el contenido es el mismo)
+- Verbosidad de logs
+- Idioma de mensajes
+
+---
+
+### **Fase 6: Estrategias de Invalidación**
+
+#### **6.1 Invalidación Manual:**
+
+**Por Ruta Específica:**
+```
+invalidate('/ruta/archivo.jpg')
+→ Solo invalida ese archivo específico
+```
+
+**Por Patrón Glob:**
+```
+invalidate('**/*.jpg')
+→ Invalida todos los archivos JPG
+```
+
+**Por Carpeta:**
+```
+invalidate('/ruta/carpeta/', { recursive: true })
+→ Invalida toda la carpeta y subcarpetas
+```
+
+**Por Tipo/Extensión:**
+```
+invalidateByType('jpg')
+→ Invalida todos los archivos de ese tipo
+```
+
+**Global:**
+```
+invalidateAll()
+→ Limpia completamente el caché
+```
+
+**Por Configuración:**
+```
+invalidateByConfig('quality')
+→ Invalida solo si cambió esa opción
+```
+
+---
+
+#### **6.2 Invalidación Automática:**
+
+**TTL (Time-To-Live):**
+```json
+{
+  "ttl": {
+    "default": 86400,
+    "byExtension": {
+      "log": 3600,
+      "pdf": 604800
+    },
+    "byPath": {
+      "/temp/**": 300
+    }
+  }
+}
+```
+
+**Por Acceso:**
+- Invalidar si no se accede en X tiempo
+- LRU (Least Recently Used)
+- LFU (Least Frequently Used)
+
+**Por Tamaño Máximo:**
+- Limitar tamaño total del caché
+- Eliminar elementos más antiguos si se excede
+- Configurable en MB o GB
+
+**Por Evento del Sistema:**
+- Invalidar al cambiar hora del sistema
+- Invalidar al detectar cambio de zona horaria
+- Invalidar al actualizar la aplicación
+
+---
+
+### **Fase 7: Recuperación ante Corrupción**
+
+#### **7.1 Detección de Corrupción:**
+
+**Checksum del Archivo de Caché:**
+- Guarda hash del archivo completo
+- Verifica al cargar
+- Detecta corrupción por escritura interrumpida
+
+**Validación de Esquema:**
+- Verifica estructura JSON/SQLite
+- Detecta campos faltantes o inválidos
+- Identifica versiones incompatibles
+
+**Validación de Integridad:**
+- Verifica que archivos referenciados existen
+- Detecta rutas huérfanas
+- Identifica resultados faltantes
+
+---
+
+#### **7.2 Estrategias de Recuperación:**
+
+**Nivel 1: Reparación Automática:**
+- Intenta corregir errores menores
+- Reconstruye índices si es necesario
+- Elimina entradas inválidas
+- Preserva datos válidos
+
+**Nivel 2: Restauración desde Backup:**
+- Mantiene backup automático antes de escribir
+- Si archivo actual está corrupto, usa backup
+- Backup rotativo (últimos N backups)
+
+**Nivel 3: Reconstrucción Completa:**
+- Si todo falla, borra caché y empieza de cero
+- Notifica al usuario
+- Regenera caché en próxima ejecución
+
+**Nivel 4: Modo Degradado:**
+- Continúa sin caché
+- Procesa todo desde cero
+- Notifica al usuario del problema
+
+---
+
+#### **7.3 Prevención de Corrupción:**
+
+**Escritura Atómica:**
+- Escribe en archivo temporal primero
+- Renombra solo al completar escritura exitosa
+- Evita corrupción por interrupción
+
+**Transacciones:**
+- Para SQLite: usa transacciones
+- Para JSON: escribe todo o nada
+- Rollback automático en caso de error
+
+**Backups Automáticos:**
+- Backup antes de cada escritura importante
+- Mantiene últimos 3-5 backups
+- Rotación automática
+
+**Versionado:**
+- Incluye versión en archivo de caché
+- Migración automática entre versiones
+- Compatibilidad hacia atrás cuando sea posible
+
+---
+
+### **Fase 8: Integración con Progress Orchestrator**
+
+#### **8.1 Reporte de Progreso:**
+
+**Durante la Clasificación:**
+```
+Analizando caché... ⠋
+  ├─ Elementos en caché: 1,234
+  ├─ Nuevos: 45
+  ├─ Modificados: 12
+  ├─ Sin cambios: 1,150
+  ├─ Eliminados: 27
+  └─ Requieren reprocesamiento: 0
+```
+
+**Durante el Procesamiento:**
+```
+Procesando elementos: ████████████████░░░░░░░░░░░░░░░░ 70% (40/57)
+  ├─ Omitidos por caché: 1,150 (96% ahorro)
+  ├─ Procesados: 40
+  ├─ Tiempo ahorrado: 2m 15s
+  └─ Fase: Convirtiendo imágenes
+```
+
+**Al Finalizar:**
+```
+✅ Procesamiento completado en 45s
+  ├─ Total elementos: 1,234
+  ├─ Omitidos por caché: 1,150 (93.2%)
+  ├─ Procesados: 57
+  ├─ Tiempo ahorrado: 2m 15s
+  ├─ Tamaño del caché: 2.1 MB
+  └─ Hit rate: 93.2%
+```
+
+---
+
+### **Fase 9: Integración con SmartScanner**
+
+#### **9.1 Flujo de Trabajo Conjunto:**
+
+```
+1. SmartScanner escanea sistema de archivos
+   └─ Devuelve lista de archivos con metadatos
+
+2. IncrementalCache clasifica cada archivo
+   ├─ Compara con caché almacenado
+   ├─ Detecta cambios en configuración
+   └─ Devuelve clasificación completa
+
+3. Aplicación procesa solo lo necesario
+   ├─ Omite "SinCambios"
+   ├─ Reprocesa "Nuevos", "Modificados", "RequiereReprocesamiento"
+   └─ Limpia "Eliminados"
+
+4. IncrementalCache actualiza caché
+   ├─ Agrega nuevos elementos
+   ├─ Actualiza modificados
+   ├─ Elimina entries obsoletas
+   └─ Persiste cambios
+```
+
+#### **9.2 Optimización Conjunta:**
+
+**SmartScanner con Caché:**
+- Usa caché para acelerar escaneos repetidos
+- Solo escanea carpetas modificadas
+- Reutiliza resultados de escaneos previos
+
+**Caché con SmartScanner:**
+- Usa metadatos del scanner para comparación
+- Evita recalcular hashes si scanner ya lo hizo
+- Comparte información de duplicados
+
+---
+
+### **Fase 10: Casos de Uso y Ejemplos**
+
+#### **Ejemplo 1: Conversor de Imágenes**
+
+```javascript
+const cache = new IncrementalCache('./.cache/images.json');
+
+const classification = await cache.classify(files, {
+  validationLevel: 'balanced',
+  configHash: currentConfigHash
+});
+
+// classification.new → procesar estas
+// classification.modified → reprocesar estas
+// classification.unchanged → omitir
+// classification.deleted → limpiar resultados
+// classification.requiresReprocessing → reprocesar con nueva config
+
+await processFiles(classification.new.concat(classification.modified));
+await cache.update(classification);
+```
+
+#### **Ejemplo 2: Compilador/Build System**
+
+```javascript
+const cache = new IncrementalCache('./.cache/build.json');
+
+const changes = await cache.classify(sourceFiles, {
+  validationLevel: 'full',
+  configHash: buildConfigHash
+});
+
+// Solo compilar archivos modificados
+await compile(changes.modified);
+
+// Solo enlazar si cambió algo
+if (changes.modified.length > 0 || changes.new.length > 0) {
+  await link();
+}
+
+await cache.update(changes);
+```
+
+#### **Ejemplo 3: Generador de Reportes**
+
+```javascript
+const cache = new IncrementalCache('./.cache/reports.json', {
+  ttl: 3600  // 1 hora
+});
+
+const status = await cache.classify(dataSources, {
+  validationLevel: 'smart'
+});
+
+// Solo regenerar reportes de fuentes modificadas
+for (const source of status.modified) {
+  await generateReport(source);
+}
+
+await cache.update(status);
+```
+
+#### **Ejemplo 4: Sincronizador de Archivos**
+
+```javascript
+const cache = new IncrementalCache('./.cache/sync.json');
+
+const diff = await cache.classify(localFiles, {
+  validationLevel: 'full',
+  compareWith: remoteFiles
+});
+
+// Solo sincronizar cambios
+await sync(diff.new, diff.modified);
+await removeRemote(diff.deleted);
+
+await cache.update(diff);
+```
+
+#### **Ejemplo 5: Analizador de Documentos**
+
+```javascript
+const cache = new IncrementalCache('./.cache/analysis.json', {
+  storage: 'sqlite'  // Para muchos documentos
+});
+
+const status = await cache.classify(documents, {
+  validationLevel: 'balanced',
+  configHash: analysisConfigHash
+});
+
+// Solo analizar documentos nuevos o modificados
+const toAnalyze = status.new.concat(status.modified);
+await analyzeBatch(toAnalyze);
+
+await cache.update(status);
+```
+
+---
+
+### **Fase 11: Configuración Completa**
+
+#### **11.1 Archivo de Configuración (`.cache.config.json`):**
+
+```json
+{
+  "version": "1.0.0",
+  "storage": {
+    "format": "json",
+    "location": ".cache/app.cache.json",
+    "backup": {
+      "enabled": true,
+      "maxBackups": 3,
+      "location": ".cache/backups/"
+    }
+  },
+  "validation": {
+    "defaultLevel": "smart",
+    "levels": {
+      "fast": ["size", "mtime"],
+      "balanced": ["size", "mtime", "partialHash"],
+      "full": ["fullHash"]
+    },
+    "hashAlgorithm": "sha256",
+    "partialHashSize": 4096
+  },
+  "invalidation": {
+    "ttl": {
+      "enabled": false,
+      "default": 86400,
+      "byExtension": {},
+      "byPath": {}
+    },
+    "maxSize": {
+      "enabled": false,
+      "limit": 104857600,
+      "strategy": "lru"
+    },
+    "onConfigChange": "reprocess",
+    "onVersionChange": "clear"
+  },
+  "recovery": {
+    "enabled": true,
+    "autoRepair": true,
+    "onCorruption": "restore_backup",
+    "checksumValidation": true
+  },
+  "performance": {
+    "batchSize": 100,
+    "parallel": true,
+    "maxWorkers": 4,
+    "writeDebounce": 1000
+  },
+  "statistics": {
+    "enabled": true,
+    "trackHitRate": true,
+    "trackTimeSaved": true,
+    "reportInterval": 100
+  }
+}
+```
+
+---
+
+### **Fase 12: Concurrencia y Seguridad**
+
+#### **12.1 Acceso Concurrente:**
+
+**Bloqueo de Archivo:**
+- File locking para evitar escrituras simultáneas
+- Soporte para múltiples procesos
+- Timeout configurable para locks
+
+**Transacciones Atómicas:**
+- Escritura completa o nada
+- Rollback automático en error
+- Consistencia garantizada
+
+**Cache Distribuido (opcional):**
+- Soporte para Redis, Memcached
+- Para aplicaciones multi-servidor
+- Sincronización entre instancias
+
+---
+
+#### **12.2 Seguridad:**
+
+**Validación de Rutas:**
+- Prevenir path traversal
+- Validar que rutas están dentro de directorios permitidos
+- Sanitizar entradas
+
+**Integridad de Datos:**
+- Checksums para detectar corrupción
+- Firmas digitales opcionales
+- Validación de esquema estricta
+
+**Permisos:**
+- Respetar permisos del sistema de archivos
+- No acceder a archivos sin permisos
+- Manejar errores de permisos gracefully
+
+---
+
+### **Fase 13: Implementación por Lenguaje**
+
+#### **Node.js:**
+```javascript
+// Librerías recomendadas:
+// - lowdb (JSON database simple)
+// - better-sqlite3 (SQLite rápido)
+// - node-cache (cache en memoria)
+// - fs-extra (operaciones atómicas)
+// - chokidar (watch para invalidación automática)
+```
+
+#### **Python:**
+```python
+# Librerías recomendadas:
+# - diskcache (cache en disco)
+# - sqlite3 (nativo)
+# - joblib (cache para funciones)
+# - watchdog (watch para cambios)
+# - hashlib (hashing)
+```
+
+#### **Rust:**
+```rust
+// Crates recomendados:
+// - sled (embedded database)
+// - rusqlite (SQLite)
+// - serde/serde_json (serialización)
+// - sha2 (hashing)
+// - notify (watch para cambios)
+// - fs2 (file locking)
+```
+
+#### **Go:**
+```go
+// Paquetes recomendados:
+// - boltdb/bbolt (embedded database)
+// - mattn/go-sqlite3 (SQLite)
+// - hash/fnv, crypto/sha256 (hashing)
+// - fsnotify (watch para cambios)
+```
+
+---
+
+### **Fase 14: Testing y Validación**
+
+#### **14.1 Estrategia de Testing:**
+
+**Unit Tests:**
+- Clasificación de elementos
+- Detección de cambios
+- Invalidación manual y automática
+- Recuperación de corrupción
+- Cálculo de estadísticas
+
+**Integration Tests:**
+- Flujo completo: escanear → clasificar → procesar → actualizar
+- Múltiples niveles de validación
+- Diferentes formatos de almacenamiento
+- Concurrencia y locks
+
+**Performance Tests:**
+- Caché con 1K, 10K, 100K, 1M elementos
+- Medición de hit rate
+- Medición de tiempo ahorrado
+- Uso de memoria y disco
+
+**Corruption Tests:**
+- Archivo truncado
+- JSON inválido
+- Campos faltantes
+- Versiones incompatibles
+- Interrupción durante escritura
+
+---
+
+### **Fase 15: Integración con Otros Skills**
+
+#### **15.1 Relación con Bootstrap Inteligente:**
+- Caché puede almacenarse en directorio gestionado por bootstrap
+- Bootstrap puede detectar caché corrupto y ofrecer limpieza
+- Caché puede acelerar bootstraps posteriores
+
+#### **15.2 Relación con Menús Adaptativos:**
+- Menú puede mostrar estadísticas de caché
+- Opción "Limpiar caché" en el menú
+- Mostrar tiempo ahorrado en última ejecución
+
+#### **15.3 Relación con Progress Orchestrator:**
+- Integración nativa para mostrar progreso de clasificación
+- Reportar hit rate y tiempo ahorrado
+- Mostrar elementos omitidos vs procesados
+
+#### **15.4 Relación con SmartScanner:**
+- SmartScanner usa caché para acelerar escaneos
+- Caché usa metadatos del scanner para comparación
+- Flujo de trabajo integrado y optimizado
+
+#### **15.5 Relación con Banners:**
+- Banner puede mostrar estadísticas de caché
+- "Caché: 93% hit rate | 2m 15s ahorrados"
+
+#### **15.6 Relación con Gestión de Directorios:**
+- Caché se almacena en directorio gestionado
+- Limpieza de caché al limpiar temporales
+- Validación de integridad de directorios de caché
+
+---
+
+### **Fase 16: Beneficios del Sistema**
+
+✅ **Universal:** Aplica a cualquier tipo de procesamiento de archivos  
+✅ **Reutilizable:** Una vez implementado, sirve para múltiples aplicaciones  
+✅ **Inteligente:** Clasifica automáticamente qué procesar y qué omitir  
+✅ **Configurable:** Cada aspecto puede personalizarse según necesidades  
+✅ **Robusto:** Maneja corrupción, errores y casos edge correctamente  
+✅ **Rápido:** Múltiples niveles de validación para diferentes escenarios  
+✅ **Eficiente:** Ahorra tiempo significativo en ejecuciones repetidas  
+✅ **Persistente:** Sobrevive entre ejecuciones de la aplicación  
+✅ **Adaptable:** Detecta cambios en configuración automáticamente  
+✅ **Recuperable:** Se recupera de corrupción y errores  
+✅ **Estadísticas ricas:** Mide efectividad y tiempo ahorrado  
+✅ **Integrable:** Trabaja con Progress Orchestrator, SmartScanner, Bootstrap, Menús  
+✅ **Multiplataforma:** Funciona en Windows, Linux, macOS  
+✅ **Concurrente:** Soporta acceso desde múltiples procesos  
+✅ **Seguro:** Validación de integridad y prevención de corrupción  
+✅ **Escalable:** Funciona desde pocos archivos hasta millones  
+✅ **Flexible:** Múltiples formatos de almacenamiento  
+✅ **Transparente:** El usuario no necesita saber que existe el caché  
+
+---
+
+### **Conclusión:**
+
+Esta skill transforma la optimización de reprocesamiento de una tarea manual y propensa a errores en un sistema inteligente, robusto y reutilizable. El IncrementalCache Universal puede integrarse en cualquier aplicación que procese colecciones de archivos, manteniendo la misma interfaz y comportamiento aunque cambie el caso de uso específico. Se integra perfectamente con los otros skills (Bootstrap, Menús Adaptativos, Banners, Progress Orchestrator, SmartScanner, Gestión de Directorios) para crear aplicaciones CLI completas, profesionales y con excelente experiencia de usuario.
+
+El sistema es lo suficientemente flexible para usarse en conversores de imágenes, compiladores, generadores de reportes, analizadores de documentos, sincronizadores de archivos, sistemas de build, procesadores de datos, y cualquier otra aplicación que necesite "no repetir trabajo innecesario". La combinación de múltiples niveles de validación, detección de cambios en configuración, recuperación ante corrupción y estadísticas detalladas lo convierte en una solución enterprise-grade para optimización de procesamiento.

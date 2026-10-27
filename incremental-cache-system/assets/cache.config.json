@@ -1,0 +1,55 @@
+{
+  "version": "1.0.0",
+  "storage": {
+    "format": "json",
+    "location": ".cache/app.cache.json",
+    "backup": {
+      "enabled": true,
+      "maxBackups": 3,
+      "location": ".cache/backups/"
+    }
+  },
+  "validation": {
+    "defaultLevel": "smart",
+    "levels": {
+      "fast": ["size", "mtime"],
+      "balanced": ["size", "mtime", "partialHash"],
+      "full": ["fullHash"]
+    },
+    "hashAlgorithm": "sha256",
+    "partialHashSize": 4096
+  },
+  "invalidation": {
+    "ttl": {
+      "enabled": false,
+      "default": 86400,
+      "byExtension": {},
+      "byPath": {}
+    },
+    "maxSize": {
+      "enabled": false,
+      "limit": 104857600,
+      "strategy": "lru"
+    },
+    "onConfigChange": "reprocess",
+    "onVersionChange": "clear"
+  },
+  "recovery": {
+    "enabled": true,
+    "autoRepair": true,
+    "onCorruption": "restore_backup",
+    "checksumValidation": true
+  },
+  "performance": {
+    "batchSize": 100,
+    "parallel": true,
+    "maxWorkers": 4,
+    "writeDebounce": 1000
+  },
+  "statistics": {
+    "enabled": true,
+    "trackHitRate": true,
+    "trackTimeSaved": true,
+    "reportInterval": 100
+  }
+}

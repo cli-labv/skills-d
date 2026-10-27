@@ -1,0 +1,14 @@
+Opción 1: Formato de Requerimiento Técnico (Para documentación o desarrolladores)
+Título: Gestión y Ciclo de Vida de los Directorios de Trabajo (Input/Output)
+1. Aislamiento del Repositorio (Control de Versiones):
+Las carpetas de trabajo (input/ y output/) deben ser excluidas por completo del control de versiones. Es obligatorio agregarlas al archivo .gitignore para garantizar que nunca se suban al repositorio de GitHub, manteniendo el repositorio limpio y centrado solo en el código fuente.
+2. Inicialización del Entorno (Arranque):
+La preparación del entorno de trabajo debe ocurrir en el script de inicio (start.sh). Al ejecutar este script, el sistema debe verificar si la carpeta input/ existe; en caso de que no exista, debe crearla automáticamente. Esto garantiza que el usuario siempre tenga el directorio listo para depositar los archivos base con los que trabajará la aplicación.
+3. Gestión Dinámica en Tiempo de Ejecución:
+La aplicación no debe depender de que las carpetas de salida existan previamente. Durante su ejecución, y justo antes de necesitar guardar los resultados procesados, la aplicación debe crear automáticamente la carpeta output/ (y cualquier otro directorio temporal o de trabajo que requiera). Esto asegura que la app sea autónoma y no arroje errores por "ruta no encontrada" en entornos limpios.
+Opción 2: Formato "Skill" / Prompt (Para dárselo a una IA y que te genere el código)
+Instrucción de Sistema / Skill: Gestión Autónoma de Directorios
+"Configura la arquitectura de archivos de la aplicación bajo las siguientes reglas estrictas de gestión de directorios:
+Regla de Git: Asegúrate de que las carpetas input/ y output/ (y cualquier subcarpeta de trabajo) estén declaradas en el .gitignore. El repositorio de GitHub solo debe contener el código fuente, nunca los datos de entrada o salida.
+Regla de Inicio (start.sh): El script de arranque debe tener la lógica para crear automáticamente la carpeta input/ si no existe en el sistema, dejándola lista para que el usuario coloque los archivos a procesar.
+Regla de Ejecución (Output): La aplicación principal debe ser autónoma en la creación de sus resultados. No asumas que la carpeta output/ existe. La app debe crearla dinámicamente en tiempo de ejecución, justo en el momento en que vaya a guardar los archivos procesados provenientes de input/.

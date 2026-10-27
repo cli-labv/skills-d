@@ -1,0 +1,232 @@
+## Skill: Sistema de Bootstrap Inteligente con Loader Adaptativo y CLI Extendida
+
+**Descripción General:**
+Implementar un sistema universal de arranque (`start.sh`) que gestione el ciclo de vida completo de inicialización de una aplicación, mostrando un loader dinámico con mensajes contextuales durante la primera ejecución, y permitiendo modos de operación adicionales mediante argumentos CLI. Este skill debe integrarse directamente con el **Skill: Sistema Inteligente de Menús Adaptativos** para que el plan de la app defina tanto las opciones del menú como los comandos disponibles.
+
+---
+
+### **Fase 1: Detección de Estado y Bootstrap**
+
+**1.1 Verificación del Estado de la Aplicación:**
+Al ejecutar `start.sh`, el sistema debe determinar en qué estado se encuentra:
+- **Estado "Fresh" (Primera ejecución):** No existen artefactos compilados, dependencias instaladas, ni entorno configurado.
+- **Estado "Ready" (Ejecuciones posteriores):** Todo está pre-compilado y listo. El arranque debe ser casi instantáneo.
+- **Estado "Dirty" (Cambio detectado):** Se modificó algo crítico (nuevas dependencias, cambio de versión, etc.) y requiere re-bootstrap parcial.
+
+**1.2 Proceso de Bootstrap Completo (Solo en Primera Ejecución):**
+El sistema debe ejecutar en orden:
+- Verificación del entorno (lenguaje, versión, herramientas necesarias)
+- Creación de estructura de directorios (input, output, temporales, cache)
+- Instalación de dependencias/librerías
+- Compilación del código fuente si aplica
+- Generación de artefactos necesarios
+- Validación final del entorno listo
+- Marcado del estado como "Ready" mediante un archivo de estado (ej: `.bootstrap.done`)
+
+---
+
+### **Fase 2: Sistema de Loader Dinámico Contextual**
+
+**2.1 Principio de Limpieza Visual:**
+Durante el bootstrap, **NUNCA** se debe mostrar el output crudo de los comandos internos (npm install, pip install, make, etc.). Todo debe capturarse y redirigirse. En su lugar, se muestra **un único mensaje en pantalla** que va cambiando según la etapa actual, acompañado de un loader visual (spinner, barra de progreso, etc.).
+
+**2.2 Mensajes Contextuales Dinámicos:**
+El loader debe mostrar mensajes específicos según lo que está ocurriendo en ese momento:
+
+```
+⏳ [1/6] Verificando entorno de ejecución...
+⏳ [2/6] Creando estructura de directorios...
+⏳ [3/6] Instalando dependencias base...
+⏳ [4/6] Compilando módulos principales...
+⏳ [5/6] Generando artefactos de arranque...
+⏳ [6/6] Validando integridad del sistema...
+✅ Sistema listo. Iniciando aplicación...
+```
+
+**2.3 Características del Loader:**
+- **Animación fluida:** Spinner o barra que indique actividad
+- **Progreso visible:** Indicador de etapa actual (ej: `[3/6]`)
+- **Mensajes descriptivos:** Que el usuario entienda qué está pasando sin ver detalles técnicos
+- **Manejo de errores elegante:** Si algo falla, mostrar mensaje claro con opción de reintentar o ver log detallado opcionalmente
+- **Modo verbose opcional:** Con un flag `--verbose` se puede mostrar el output completo para debugging
+
+**2.4 Comportamiento Post-Bootstrap:**
+Una vez completado el primer inicio exitoso, las siguientes ejecuciones de `start.sh`:
+- Detectan el archivo de estado `.bootstrap.done`
+- Saltan todo el proceso de bootstrap
+- Muestran un mensaje breve tipo `✅ Cargando aplicación...` (1-2 segundos máximo)
+- Pasan directamente a la funcionalidad de la app
+
+---
+
+### **Fase 3: Sistema de Comandos Extendidos (CLI Flags)**
+
+**3.1 Integración con el Plan de la App:**
+Los comandos disponibles deben definirse en conjunto con el **Skill de Menús Adaptativos**. Según el tipo de app identificado en el plan, el sistema sugerirá qué flags tienen sentido implementar.
+
+**3.2 Flags Estándar Universales:**
+Independientemente de la app, todo `start.sh` debe soportar como mínimo:
+
+- `./start.sh` (sin argumentos) → Comportamiento por defecto definido en el plan (menú simple o funcionalidad principal)
+- `./start.sh --menu` → Fuerza la aparición del menú interactivo completo
+- `./start.sh --auto` → Modo automático/sin interacción (usa valores por defecto)
+- `./start.sh --apply` → Aplica configuración o cambios pendientes
+- `./start.sh --help` → Muestra ayuda con todos los comandos disponibles
+- `./start.sh --version` → Muestra versión de la app
+- `./start.sh --reset` → Fuerza re-bootstrap completo (borra estado y recompila)
+- `./start.sh --verbose` → Muestra output detallado durante el bootstrap
+
+**3.3 Flags Específicos por Tipo de App (Sugeridos por el Plan):**
+
+**Para Apps de Procesamiento:**
+- `--process <archivo>` → Procesa un archivo específico directamente
+- `--batch` → Ejecuta procesamiento por lotes sin menú
+
+**Para Apps de Gestión de Sesiones:**
+- `--list` → Lista sesiones y sale
+- `--clean` → Limpia sesiones antiguas automáticamente
+- `--session <id>` → Conecta directamente a una sesión
+
+**Para Apps de Despliegue/DevOps:**
+- `--deploy` → Ejecuta despliegue directo
+- `--check` → Solo verifica estado sin hacer cambios
+- `--rollback` → Revierte al estado anterior
+
+**3.4 Validación de Combinaciones:**
+El sistema debe detectar combinaciones inválidas de flags y mostrar errores claros:
+```
+❌ Error: No se puede combinar --auto con --menu
+ℹ️  Usa './start.sh --help' para ver las opciones válidas
+```
+
+---
+
+### **Fase 4: Integración con el Plan de la App**
+
+**4.1 Flujo de Trabajo Conjunto:**
+Este skill y el **Skill de Menús Adaptativos** deben trabajar en tandem:
+
+```
+1. Plan de la App define:
+   ├─ Tipo de aplicación
+   ├─ Recursos que maneja
+   ├─ Funcionalidad principal
+   └─ Modos de operación deseados
+
+2. Skill de Menús Adaptativos genera:
+   ├─ Estructura del menú interactivo
+   ├─ Opciones disponibles
+   └─ Flags CLI sugeridos
+
+3. Skill de Bootstrap implementa:
+   ├─ El start.sh que orquesta todo
+   ├─ El loader dinámico
+   ├─ El router de comandos (flags)
+   └─ La integración con el menú/funcionalidad
+```
+
+**4.2 Archivo de Configuración del Plan:**
+El sistema debe leer un archivo (ej: `app.plan.json` o similar) que defina:
+- Nombre y versión de la app
+- Dependencias requeridas
+- Comandos de bootstrap específicos del lenguaje
+- Flags CLI habilitados
+- Comportamiento por defecto cuando se ejecuta sin argumentos
+- Mensajes personalizados del loader
+
+---
+
+### **Fase 5: Manejo de Errores y Recuperación**
+
+**5.1 Durante el Bootstrap:**
+- Si falla la instalación de dependencias → mensaje claro + opción de reintentar
+- Si falla la compilación → mostrar último error + sugerencia de solución
+- Si el entorno no cumple requisitos → lista de lo que falta + cómo instalarlo
+- Si se interrumpe el proceso (Ctrl+C) → dejar estado limpio para reintentar
+
+**5.2 Durante la Ejecución Normal:**
+- Si el archivo de estado se corrompe → detectar y ofrecer re-bootstrap
+- Si faltan archivos críticos → reconstruir automáticamente
+- Si hay cambio de versión → migrar estado si es posible, sino re-bootstrap
+
+**5.3 Logs y Debugging:**
+- Todo el output del bootstrap se guarda en un log (ej: `.logs/bootstrap.log`)
+- En caso de error, ofrecer al usuario: `¿Ver log detallado? [s/N]`
+- El log permite diagnosticar problemas sin ensuciar la salida normal
+
+---
+
+### **Fase 6: Ejemplo de Flujo Completo**
+
+**Primera ejecución:**
+```
+$ ./start.sh
+⏳ [1/6] Verificando entorno de ejecución...
+⏳ [2/6] Creando estructura de directorios...
+⏳ [3/6] Instalando dependencias base...
+⏳ [4/6] Compilando módulos principales...
+⏳ [5/6] Generando artefactos de arranque...
+⏳ [6/6] Validando integridad del sistema...
+✅ Sistema listo.
+
+📋 Menú Principal:
+  1. 📁 Gestionar sesiones
+  2. ⚡ Procesamiento rápido
+  3. ⚙️ Configuración
+  4. ❓ Ayuda
+  0. 🚪 Salir
+> _
+```
+
+**Ejecuciones posteriores:**
+```
+$ ./start.sh
+✅ Cargando aplicación...
+
+📋 Menú Principal:
+  1. 📁 Gestionar sesiones
+  2. ⚡ Procesamiento rápido
+  3. ⚙️ Configuración
+  4. ❓ Ayuda
+  0. 🚪 Salir
+> _
+```
+
+**Con flag específico:**
+```
+$ ./start.sh --auto
+✅ Cargando aplicación...
+🚀 Ejecutando en modo automático...
+[procesa sin interacción]
+✅ Completado.
+```
+
+**Con flag inválido:**
+```
+$ ./start.sh --foo
+❌ Error: Flag '--foo' no reconocido
+ℹ️  Usa './start.sh --help' para ver las opciones válidas
+```
+
+---
+
+### **Beneficios de este Sistema:**
+
+✅ **Experiencia limpia:** El usuario nunca ve output técnico crudo  
+✅ **Primer uso guiado:** Bootstrap automático sin que el usuario instale nada manualmente  
+✅ **Rendimiento óptimo:** Primer inicio completo, siguientes instantáneos  
+✅ **Flexibilidad total:** Múltiples modos de operación vía flags  
+✅ **Integración perfecta:** Trabaja en conjunto con el Plan y el Menú Adaptativo  
+✅ **Recuperación robusta:** Manejo elegante de errores en cualquier fase  
+✅ **Universal:** Aplica a cualquier lenguaje o tecnología  
+✅ **Debug friendly:** Logs disponibles cuando se necesitan  
+
+---
+
+### **Relación con Otros Skills:**
+
+- **Skill: Menús Adaptativos** → Define *qué* opciones y flags existen
+- **Skill: Bootstrap Inteligente** → Define *cómo* se levanta y arranca la app
+- **Skill: Gestión de Directorios** (input/output) → Define *dónde* se guardan los datos
+
+Los tres skills trabajan juntos para crear aplicaciones profesionales, limpias y con excelente experiencia de usuario desde el primer `./start.sh`.

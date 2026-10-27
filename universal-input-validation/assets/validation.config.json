@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0",
+  "levels": {
+    "fast": {
+      "checks": ["existence", "basicType", "extensions", "requiredOptions", "securityCritical"],
+      "maxTimeMs": 100
+    },
+    "standard": {
+      "checks": ["fast", "permissions", "emptyFiles", "optionCompatibility", "diskSpaceBasic", "dependencyVersions", "duplicates"],
+      "maxTimeMs": 5000
+    },
+    "deep": {
+      "checks": ["standard", "fullHashIntegrity", "magicBytes", "detailedPermissions", "memoryEstimation", "encodingValidation", "securityExhaustive", "dryRunWrite"],
+      "maxTimeMs": 60000
+    },
+    "smart": {
+      "autoSelect": true,
+      "rules": {
+        "destructive": "deep",
+        "criticalFiles": "deep",
+        "reversible": "standard",
+        "trustedSystem": "fast",
+        "firstExecution": "deep",
+        "validCache": "fast"
+      }
+    }
+  },
+  "security": {
+    "allowedRoots": ["/home/user/projects", "/tmp/app"],
+    "blockPathTraversal": true,
+    "blockSymlinkEscape": true,
+    "logSuspiciousAttempts": true,
+    "protectedPaths": ["/", "/etc", "/bin", "/sbin", "/usr", "/var", "/boot", "/lib", "~/.ssh", "~/.gnupg", "~/.config", ".bashrc", ".zshrc", ".profile"]
+  },
+  "sandbox": {
+    "input": null,
+    "output": null,
+    "temp": null,
+    "strict": false
+  },
+  "i18n": {
+    "defaultLocale": "en",
+    "detectFromEnv": ["LANG", "LC_ALL", "LANGUAGE"],
+    "fallback": "en",
+    "localesDir": "locales/",
+    "availableLocales": ["en", "es", "fr", "de", "pt", "ja"]
+  },
+  "phases": ["pre-execution", "during-execution", "post-execution"],
+  "incrementalValidation": {
+    "enabled": true,
+    "cacheKey": "hash(inputs + config)",
+    "ttl": 3600
+  }
+}

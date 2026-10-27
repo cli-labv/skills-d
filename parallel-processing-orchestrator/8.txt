@@ -1,0 +1,1199 @@
+## Skill: Procesamiento Paralelo Universal - Orquestador Inteligente de Concurrencia para CLI
+
+**Descripción General:**
+Implementar un sistema universal, reutilizable e inteligente de procesamiento paralelo que ejecute múltiples trabajos simultáneamente para reducir el tiempo total de procesamiento, utilizando una capa configurable basada en hilos, tareas asíncronas o colas de trabajo según el tipo de operación; el sistema debe exponer una interfaz común `parallel_map(items, worker, options)` que reciba los elementos, la función procesadora y parámetros como número máximo de trabajadores, tamaño de lote, orden de resultados, política de reintentos, cancelación y comportamiento ante errores; debe conservar el orden original cuando sea importante, limitar la cantidad de tareas para no consumir toda la memoria, permitir procesamiento por carpetas o por archivos, informar el progreso de cada tarea y del conjunto global, recoger éxitos y fallos sin detener necesariamente todo el proceso y cerrar correctamente los recursos cuando el usuario cancele la operación; además, debe detectar cuándo una operación no es adecuada para paralelismo, evitar condiciones de carrera, soportar modo secuencial para pruebas y ofrecer métricas para comparar el rendimiento paralelo con el modo normal, integrándose perfectamente con el **Progress Orchestrator**, **SmartScanner** e **IncrementalCache**.
+
+---
+
+### **Fase 1: Arquitectura del Sistema de Procesamiento Paralelo**
+
+#### **1.1 Componentes Principales:**
+
+**ParallelOrchestrator (Orquestador Principal):**
+- Punto de entrada único mediante interfaz `parallel_map(items, worker, options)`
+- Detecta automáticamente el tipo de operación (CPU-bound vs IO-bound)
+- Selecciona la estrategia de concurrencia óptima
+- Coordina todos los componentes del sistema
+- Gestiona el ciclo de vida completo del procesamiento
+
+**WorkerPool (Pool de Trabajadores):**
+- Gestiona el pool de trabajadores (hilos, procesos, tareas async)
+- Ajusta tamaño dinámicamente según carga
+- Implementa backpressure para evitar saturación
+- Reutiliza trabajadores para reducir overhead
+- Soporta múltiples backends: threads, processes, async, hybrid
+
+**TaskQueue (Cola de Tareas):**
+- Cola prioritaria con soporte para diferentes estrategias (FIFO, LIFO, prioridad)
+- Implementa backpressure cuando está llena
+- Soporta cancelación selectiva de tareas pendientes
+- Permite pausar y reanudar el procesamiento
+- Persiste estado para recuperación tras fallos
+
+**OrderPreserver (Preservador de Orden):**
+- Garantiza que los resultados se entreguen en el mismo orden que las entradas
+- Usa índices internos para reordenamiento
+- Opcional: puede desactivarse para máximo rendimiento
+- Buffer inteligente para no acumular resultados en memoria
+
+**RetryManager (Gestor de Reintentos):**
+- Implementa políticas configurables: none, fixed, exponential, custom
+- Backoff exponencial con jitter para evitar thundering herd
+- Máximo de reintentos configurable por tarea
+- Diferenciación entre errores recuperables y fatales
+- Circuit breaker para evitar saturación de recursos fallidos
+
+**ErrorCollector (Colector de Errores):**
+- Recopila errores sin detener el procesamiento completo
+- Clasifica errores: recuperables, fatales, ignorables
+- Permite continuar, abortar o pausar según política
+- Genera reporte final de fallos con contexto completo
+- Soporta callback `onError` para manejo en tiempo real
+
+**MetricsCollector (Colector de Métricas):**
+- Mide tiempo total, tiempo por tarea, throughput
+- Compara rendimiento paralelo vs secuencial
+- Calcula speedup real y eficiencia
+- Detecta cuellos de botella
+- Exporta métricas en formatos estándar (JSON, CSV)
+
+---
+
+### **Fase 2: Interfaz y API Pública**
+
+#### **2.1 Método Principal:**
+
+```
+parallel_map(items, worker, options): Promise<ParallelResult>
+```
+
+**Parámetros:**
+- `items`: Array/iterable de elementos a procesar
+- `worker`: Función `(item, context) => result` que procesa cada elemento
+- `options`: Objeto opcional con configuración completa
+
+**Retorno:**
+- `ParallelResult`: Estructura con resultados, errores, métricas y estadísticas
+
+#### **2.2 Métodos Adicionales:**
+
+**`parallel_for_each(items, worker, options)`:**
+- Como `parallel_map` pero no acumula resultados
+- Ideal para efectos secundarios (escribir archivos, enviar emails)
+- Menor uso de memoria
+
+**`parallel_reduce(items, worker, reducer, initial, options)`:**
+- Procesamiento paralelo con agregación final
+- Útil para cálculos acumulativos (sumas, conteos)
+- Implementa patrón map-reduce
+
+**`parallel_pipeline(stages, options)`:**
+- Ejecuta múltiples etapas en pipeline
+- Cada etapa procesa y pasa a la siguiente
+- Permite diferentes niveles de paralelismo por etapa
+- Ideal para flujos complejos (leer → transformar → escribir)
+
+**`parallel_batch(items, worker, batchSize, options)`:**
+- Procesa en lotes del tamaño especificado
+- Útil cuando el worker acepta múltiples elementos
+- Reduce overhead de llamadas
+
+**`parallel_stream(items, worker, options)`:**
+- Retorna un stream/iterator de resultados
+- Permite consumo incremental sin esperar todo
+- Ideal para sistemas con millones de elementos
+
+---
+
+### **Fase 3: Configuración y Opciones**
+
+#### **3.1 Objeto ParallelOptions Completo:**
+
+```json
+{
+  "concurrency": {
+    "maxWorkers": "auto",
+    "workerType": "auto",
+    "batchSize": 1,
+    "preserveOrder": true,
+    "queueSize": 1000
+  },
+  "retry": {
+    "enabled": true,
+    "maxAttempts": 3,
+    "strategy": "exponential",
+    "initialDelay": 100,
+    "maxDelay": 5000,
+    "jitter": true,
+    "retryableErrors": ["EAGAIN", "ETIMEDOUT", "network"]
+  },
+  "errorHandling": {
+    "strategy": "continue",
+    "maxErrors": null,
+    "onError": "collect",
+    "failFast": false
+  },
+  "cancellation": {
+    "enabled": true,
+    "gracefulShutdown": true,
+    "timeout": 5000,
+    "onCancel": "complete_current"
+  },
+  "memory": {
+    "maxMemoryMB": null,
+    "backpressure": true,
+    "gcThreshold": 0.8,
+    "streamResults": false
+  },
+  "progress": {
+    "enabled": true,
+    "updateInterval": 100,
+    "showIndividual": false,
+    "style": "auto"
+  },
+  "metrics": {
+    "enabled": true,
+    "compareSequential": false,
+    "exportFormat": "json",
+    "exportPath": null
+  },
+  "debug": {
+    "sequentialMode": false,
+    "deterministicOrder": false,
+    "logLevel": "warn"
+  }
+}
+```
+
+#### **3.2 Presets Configurables:**
+
+**Preset "IO-bound" (operaciones de E/S):**
+- Muchos workers (hasta límite del sistema)
+- Worker type: async/threads
+- Batch size pequeño
+- Ideal para: descargas, lecturas de disco, llamadas API
+
+**Preset "CPU-bound" (operaciones de CPU):**
+- Workers = número de núcleos
+- Worker type: processes (evita GIL en Python)
+- Batch size mayor para reducir overhead
+- Ideal para: procesamiento de imágenes, cálculos, compresión
+
+**Preset "mixed" (operaciones mixtas):**
+- Detección automática del tipo
+- Ajuste dinámico de workers
+- Balance entre threads y processes
+- Ideal para: pipelines complejos
+
+**Preset "safe" (máxima estabilidad):**
+- Pocos workers conservadores
+- Reintentos agresivos
+- Fail-fast ante errores
+- Ideal para: producción crítica
+
+**Preset "fast" (máxima velocidad):**
+- Muchos workers agresivos
+- Sin reintentos
+- Continuar ante errores
+- Ideal para: procesamiento por lotes no crítico
+
+**Preset "testing" (modo pruebas):**
+- Modo secuencial forzado
+- Orden determinista
+- Sin aleatoriedad
+- Ideal para: tests unitarios, debugging
+
+---
+
+### **Fase 4: Detección Automática de Estrategia**
+
+#### **4.1 Detección del Tipo de Operación:**
+
+**Análisis Heurístico:**
+```
+Si worker hace I/O (lectura/escritura de archivos, red):
+  → IO-bound → usar async/threads con muchos workers
+
+Si worker hace cálculos intensivos:
+  → CPU-bound → usar processes con workers = núcleos
+
+Si worker hace ambas cosas:
+  → Mixed → usar hybrid con balance dinámico
+
+Si no se puede determinar:
+  → Benchmark rápido (5 muestras) para decidir
+```
+
+**Señales de IO-bound:**
+- Llamadas a `fs.read`, `fs.write`, `fetch`, `http`
+- Operaciones de red o disco
+- Llamadas a bases de datos
+- Esperas explícitas (`sleep`, `await`)
+
+**Señales de CPU-bound:**
+- Bucles intensivos de cálculo
+- Procesamiento de imágenes/audio/video
+- Compresión/encriptación
+- Operaciones matemáticas complejas
+
+#### **4.2 Detección de Cuándo NO Paralelizar:**
+
+**El sistema debe detectar y advertir cuando:**
+
+**Conjuntos muy pequeños (<10 elementos):**
+- Overhead de paralelismo > beneficio
+- Sugerir modo secuencial
+- Mensaje: "Conjunto muy pequeño, procesamiento secuencial más eficiente"
+
+**Operaciones con dependencias:**
+- Elementos que dependen de resultados anteriores
+- Estado compartido no thread-safe
+- Sugerir procesamiento secuencial o pipeline
+
+**Recursos limitados:**
+- Sistema con poca memoria
+- Disco ya saturado
+- Red con ancho de banda limitado
+- Sugerir menos workers o modo secuencial
+
+**Operaciones atómicas:**
+- Transacciones de base de datos
+- Operaciones que requieren exclusión mutua
+- Sugerir procesamiento secuencial
+
+**Cuando el worker ya es paralelo internamente:**
+- Evitar paralelismo anidado (parallelism nesting)
+- Detectar y advertir al usuario
+
+#### **4.3 Cálculo Óptimo de Workers:**
+
+**Fórmula para IO-bound:**
+```
+workers = min(items.length, max_workers_config, system_limit)
+```
+
+**Fórmula para CPU-bound:**
+```
+workers = min(items.length, cpu_cores, max_workers_config)
+```
+
+**Fórmula híbrida:**
+```
+workers = min(
+  items.length,
+  cpu_cores * io_factor + io_workers,
+  max_workers_config,
+  memory_limit / per_worker_memory
+)
+```
+
+**Ajuste dinámico:**
+- Monitorear uso de CPU/memoria en tiempo real
+- Reducir workers si hay saturación
+- Aumentar workers si hay capacidad ociosa
+- Implementar gradualmente (no cambios bruscos)
+
+---
+
+### **Fase 5: Patrones de Procesamiento**
+
+#### **5.1 Patrón Map (Mapeo Paralelo):**
+
+```
+Entrada:  [A, B, C, D, E]
+Worker:   f(x) → y
+Salida:   [f(A), f(B), f(C), f(D), f(E)]
+```
+
+**Características:**
+- Cada elemento se procesa independientemente
+- Resultados en mismo orden que entradas (si `preserveOrder: true`)
+- Ideal para transformaciones uno-a-uno
+
+**Ejemplo:**
+```javascript
+const results = await parallelMap(
+  imageFiles,
+  async (file) => await convertImage(file, 'png'),
+  { maxWorkers: 4 }
+);
+```
+
+---
+
+#### **5.2 Patrón Filter (Filtrado Paralelo):**
+
+```
+Entrada:  [A, B, C, D, E]
+Worker:   f(x) → boolean
+Salida:   [elementos donde f(x) === true]
+```
+
+**Características:**
+- Evaluación paralela del predicado
+- Mantiene orden relativo
+- Ideal para validaciones masivas
+
+**Ejemplo:**
+```javascript
+const validFiles = await parallelFilter(
+  allFiles,
+  async (file) => await isValidImage(file),
+  { maxWorkers: 8 }
+);
+```
+
+---
+
+#### **5.3 Patrón Reduce (Agregación Paralela):**
+
+```
+Entrada:  [A, B, C, D, E]
+Worker:   f(x) → partial_result
+Reducer:  (acc, partial) → new_acc
+Salida:   resultado_final
+```
+
+**Características:**
+- Procesamiento paralelo + agregación final
+- Reducer debe ser asociativo
+- Ideal para cálculos acumulativos
+
+**Ejemplo:**
+```javascript
+const totalSize = await parallelReduce(
+  files,
+  async (file) => await getFileSize(file),
+  (acc, size) => acc + size,
+  0,
+  { maxWorkers: 4 }
+);
+```
+
+---
+
+#### **5.4 Patrón Pipeline (Tubería de Etapas):**
+
+```
+Etapa 1: Leer archivos (paralelo, 8 workers)
+   ↓
+Etapa 2: Validar (paralelo, 4 workers)
+   ↓
+Etapa 3: Transformar (paralelo, 2 workers - CPU-bound)
+   ↓
+Etapa 4: Escribir (paralelo, 8 workers)
+```
+
+**Características:**
+- Múltiples etapas conectadas
+- Cada etapa con su propio nivel de paralelismo
+- Buffer entre etapas para backpressure
+- Ideal para flujos complejos
+
+**Ejemplo:**
+```javascript
+const pipeline = parallelPipeline([
+  { worker: readFile, workers: 8 },
+  { worker: validate, workers: 4 },
+  { worker: transform, workers: 2 },
+  { worker: writeFile, workers: 8 }
+]);
+
+await pipeline.process(files);
+```
+
+---
+
+#### **5.5 Patrón Batch (Procesamiento por Lotes):**
+
+```
+Entrada:  [A, B, C, D, E, F, G, H]
+Batch:    3
+Worker:   f([A,B,C]), f([D,E,F]), f([G,H])
+```
+
+**Características:**
+- Worker recibe múltiples elementos
+- Reduce overhead de llamadas
+- Ideal cuando worker acepta lotes naturalmente
+
+**Ejemplo:**
+```javascript
+await parallelBatch(
+  files,
+  async (batch) => await insertBatchToDB(batch),
+  100,  // 100 archivos por lote
+  { maxWorkers: 4 }
+);
+```
+
+---
+
+### **Fase 6: Manejo de Errores y Reintentos**
+
+#### **6.1 Clasificación de Errores:**
+
+**Errores Recuperables:**
+- Timeouts de red
+- Archivos temporalmente bloqueados
+- Errores transitorios de E/S
+- Rate limiting de APIs
+- **Acción:** reintentar según política
+
+**Errores Fatales:**
+- Memoria insuficiente
+- Permiso denegado permanente
+- Archivo corrupto irreparable
+- Configuración inválida
+- **Acción:** fallar inmediatamente o marcar elemento como fallido
+
+**Errores Ignorables:**
+- Archivos que no aplican
+- Validaciones que fallan por diseño
+- **Acción:** registrar y continuar
+
+---
+
+#### **6.2 Políticas de Reintento:**
+
+**None (sin reintentos):**
+```
+Intento 1 → falla → error inmediato
+```
+
+**Fixed (intervalo fijo):**
+```
+Intento 1 → falla → esperar 1s → Intento 2 → falla → esperar 1s → Intento 3
+```
+
+**Exponential (backoff exponencial):**
+```
+Intento 1 → falla → esperar 100ms
+Intento 2 → falla → esperar 200ms
+Intento 3 → falla → esperar 400ms
+```
+
+**Exponential + Jitter (aleatoriedad):**
+```
+Intento 1 → falla → esperar 100ms ± 20%
+Intento 2 → falla → esperar 200ms ± 20%
+Intento 3 → falla → esperar 400ms ± 20%
+```
+Evita thundering herd cuando múltiples workers fallan simultáneamente.
+
+**Custom (función personalizada):**
+```javascript
+retry: {
+  strategy: (attempt, error) => {
+    if (error.code === 'RATE_LIMIT') return error.retryAfter * 1000;
+    if (attempt < 3) return 1000 * Math.pow(2, attempt);
+    return null; // no reintentar
+  }
+}
+```
+
+---
+
+#### **6.3 Circuit Breaker (Cortocircuito):**
+
+**Protege contra fallos en cascada:**
+
+```
+Estado CLOSED (normal):
+  → Procesando normalmente
+  → Contando fallos recientes
+
+Estado OPEN (abierto):
+  → Si fallos > threshold en ventana de tiempo
+  → Detener procesamiento temporalmente
+  → Evitar saturar recurso fallido
+
+Estado HALF-OPEN (prueba):
+  → Después de timeout, permitir algunos intentos
+  → Si funcionan → volver a CLOSED
+  → Si fallan → volver a OPEN
+```
+
+**Configuración:**
+```json
+{
+  "circuitBreaker": {
+    "enabled": true,
+    "failureThreshold": 5,
+    "timeWindow": 60000,
+    "resetTimeout": 30000,
+    "halfOpenAttempts": 3
+  }
+}
+```
+
+---
+
+#### **6.4 Estrategias de Manejo de Errores Globales:**
+
+**Continue (continuar):**
+- Recopila errores pero continúa procesando
+- Resultado final incluye éxitos y fallos
+- Ideal para procesamiento por lotes no crítico
+
+**FailFast (fallar rápido):**
+- Al primer error, cancela todo el procesamiento
+- Limpia recursos inmediatamente
+- Ideal para operaciones atómicas o críticas
+
+**Threshold (umbral):**
+- Continúa hasta alcanzar N errores
+- Luego cancela el resto
+- Balance entre continuar y fallar rápido
+
+**RetryAll (reintentar todo):**
+- Al final, reintenta solo los fallidos
+- Útil para errores transitorios masivos
+
+---
+
+### **Fase 7: Control de Memoria y Backpressure**
+
+#### **7.1 Estrategias de Control de Memoria:**
+
+**Límite de Workers por Memoria:**
+```
+max_workers = available_memory / memory_per_worker
+```
+
+**Backpressure en Cola:**
+- Si cola supera tamaño máximo, pausar producción
+- Workers consumen antes de aceptar más elementos
+- Evita acumulación infinita en memoria
+
+**Streaming de Resultados:**
+- No acumular todos los resultados en memoria
+- Entregar resultados vía stream/iterator
+- Ideal para millones de elementos
+
+**Liberación Proactiva:**
+- Liberar referencias a elementos procesados
+- GC hints cuando sea posible
+- Monitoreo de uso de memoria en tiempo real
+
+---
+
+#### **7.2 Detección de Fuga de Memoria:**
+
+**Monitoreo Continuo:**
+- Medir uso de memoria cada N tareas
+- Detectar crecimiento anómalo
+- Alertar al usuario antes de crash
+
+**Acciones Automáticas:**
+- Reducir workers si memoria > 80%
+- Pausar procesamiento si memoria > 90%
+- Abortar si memoria > 95%
+
+---
+
+### **Fase 8: Cancelación y Shutdown**
+
+#### **8.1 Cancelación Graceful:**
+
+**Flujo de Cancelación:**
+```
+1. Usuario presiona Ctrl+C o llama cancel()
+2. Sistema marca estado "cancelling"
+3. Deja de aceptar nuevas tareas
+4. Espera a que workers actuales terminen (con timeout)
+5. Si timeout excedido, fuerza terminación
+6. Limpia recursos (archivos temporales, conexiones)
+7. Guarda estado parcial para reanudación
+8. Reporta progreso alcanzado
+```
+
+**Estados de Cancelación:**
+- `complete_current`: termina tareas en curso, no inicia nuevas
+- `abort_immediately`: aborta todo inmediatamente
+- `checkpoint_and_exit`: guarda estado y sale
+
+---
+
+#### **8.2 Manejo de Ctrl+C:**
+
+**Primer Ctrl+C:**
+- Inicia cancelación graceful
+- Muestra mensaje: "Cancelando... presiona Ctrl+C nuevamente para forzar"
+
+**Segundo Ctrl+C (dentro de 3s):**
+- Fuerza terminación inmediata
+- Limpieza mínima
+- Puede dejar estado inconsistente
+
+**Tercer Ctrl+C:**
+- Terminación forzada del proceso
+- Último recurso
+
+---
+
+#### **8.3 Limpieza de Recursos:**
+
+**Recursos a Limpiar:**
+- Archivos temporales creados durante procesamiento
+- Conexiones de red abiertas
+- Workers/hilos activos
+- Bloqueos de archivos
+- Memoria compartida
+- Handlers de señales
+
+**Garantías:**
+- `finally` blocks en todos los paths
+- Registered cleanup handlers
+- Timeout para limpieza (evita colgar)
+- Reporte de recursos no liberados
+
+---
+
+### **Fase 9: Preservación de Orden**
+
+#### **9.1 Cuando el Orden Importa:**
+
+**Casos donde preservar orden es crítico:**
+- Resultados que se mostrarán al usuario
+- Archivos que deben mantener secuencia
+- Operaciones que dependen de orden previo
+- Reportes ordenados
+
+**Casos donde el orden NO importa:**
+- Procesamiento independiente
+- Agregaciones finales
+- Operaciones conmutativas
+
+---
+
+#### **9.2 Implementación de OrderPreserver:**
+
+**Algoritmo:**
+```
+1. Asignar índice único a cada elemento al entrar
+2. Workers procesan en cualquier orden
+3. Resultados se almacenan con su índice
+4. Al final, reordenar por índice
+5. Entregar resultados en orden original
+```
+
+**Optimización:**
+- Buffer circular para no acumular todo
+- Entregar resultados tan pronto como estén listos si el anterior ya fue entregado
+- Streaming ordenado para sistemas grandes
+
+**Costo:**
+- Overhead mínimo (solo asignación de índices)
+- Memoria adicional para buffer de reordenamiento
+- Desactivable con `preserveOrder: false` para máximo rendimiento
+
+---
+
+### **Fase 10: Prevención de Condiciones de Carrera**
+
+#### **10.1 Recursos Compartidos:**
+
+**Problemas Comunes:**
+- Múltiples workers escribiendo al mismo archivo
+- Contadores compartidos sin sincronización
+- Estado global modificado concurrentemente
+- Acceso a estructuras de datos no thread-safe
+
+---
+
+#### **10.2 Estrategias de Protección:**
+
+**Inmutabilidad:**
+- Workers reciben copias, no referencias compartidas
+- Resultados son inmutables
+- Estado se comunica vía mensajes, no memoria compartida
+
+**Sincronización:**
+- Locks/mutexes para recursos críticos
+- Semáforos para limitar acceso concurrente
+- Colas serializadoras para operaciones atómicas
+
+**Isolación:**
+- Cada worker tiene su propio estado
+- Comunicación solo al inicio y final
+- Procesos separados en lugar de hilos cuando sea necesario
+
+**Patrones Seguros:**
+- Actor model para estado compartido
+- Message passing en lugar de memoria compartida
+- Thread-local storage para datos por worker
+
+---
+
+#### **10.3 Detección de Race Conditions:**
+
+**En Modo Debug:**
+- Ejecutar con un solo worker (secuencial)
+- Ejecutar con orden aleatorio
+- Comparar resultados entre ejecuciones
+- Si difieren → posible race condition
+
+**Herramientas:**
+- Thread sanitizers (TSan)
+- Race condition detectors
+- Logs detallados de operaciones concurrentes
+
+---
+
+### **Fase 11: Integración con Progress Orchestrator**
+
+#### **11.1 Reporte de Progreso:**
+
+**Progreso Global:**
+```
+Procesando archivos: ████████████████░░░░░░░░░░░░░░░░ 50% (500/1000)
+  ├─ Workers activos: 4/4
+  ├─ Velocidad: 25 archivos/s
+  ├─ ETA: 20s
+  ├─ Éxitos: 498
+  └─ Fallos: 2
+```
+
+**Progreso Individual (MultiProgress):**
+```
+Workers en acción:
+  ├─ Worker 1: procesando archivo_050.jpg ████████░░░░ 67%
+  ├─ Worker 2: procesando archivo_051.jpg ████████████ 100% ✓
+  ├─ Worker 3: procesando archivo_052.jpg ████░░░░░░░░ 33%
+  └─ Worker 4: [esperando tarea]
+```
+
+---
+
+#### **11.2 Eventos Emitidos:**
+
+```
+parallel.started           → Inicio del procesamiento
+parallel.task.started      → Worker inició tarea
+parallel.task.completed    → Worker completó tarea
+parallel.task.failed       → Worker falló en tarea
+parallel.task.retrying     → Worker reintentando tarea
+parallel.progress          → Actualización de progreso
+parallel.worker.spawned    → Nuevo worker creado
+parallel.worker.terminated → Worker terminado
+parallel.cancellation      → Cancelación iniciada
+parallel.completed         → Procesamiento finalizado
+parallel.failed            → Procesamiento falló
+```
+
+---
+
+### **Fase 12: Métricas y Comparación de Rendimiento**
+
+#### **12.1 Métricas Recolectadas:**
+
+**Métricas de Tiempo:**
+- Tiempo total de ejecución
+- Tiempo por tarea (min, max, avg, p50, p95, p99)
+- Tiempo de setup (crear workers)
+- Tiempo de teardown (limpiar workers)
+- Tiempo de espera en cola
+
+**Métricas de Throughput:**
+- Tareas por segundo
+- MB/s procesados (si aplica)
+- Elementos procesados por worker
+
+**Métricas de Eficiencia:**
+- Speedup vs secuencial
+- Eficiencia paralela (speedup / workers)
+- Overhead de paralelismo
+- % de tiempo en procesamiento vs espera
+
+**Métricas de Errores:**
+- Total de errores
+- Errores por tipo
+- Reintentos exitosos vs fallidos
+- % de tareas que requirieron reintento
+
+---
+
+#### **12.2 Comparación con Modo Secuencial:**
+
+**Modo Benchmark:**
+```javascript
+const result = await parallelMap(items, worker, {
+  metrics: {
+    compareSequential: true,
+    iterations: 3
+  }
+});
+```
+
+**Reporte de Comparación:**
+```
+📊 Análisis de Rendimiento:
+  ├─ Modo secuencial: 45.2s
+  ├─ Modo paralelo (4 workers): 12.3s
+  ├─ Speedup: 3.67x
+  ├─ Eficiencia: 91.8%
+  ├─ Overhead de paralelismo: 0.8s (1.8%)
+  └─ Recomendación: paralelismo BENEFICIOSO ✓
+```
+
+---
+
+#### **12.3 Recomendaciones Automáticas:**
+
+**Basadas en métricas:**
+```
+Si speedup < 1.1x:
+  → "Paralelismo no está ayudando. Considera modo secuencial."
+
+Si efficiency < 50%:
+  → "Baja eficiencia. Posible cuello de botella. Reduce workers."
+
+Si overhead > 20%:
+  → "Overhead alto. Aumenta batch size o reduce workers."
+
+Si error_rate > 10%:
+  → "Alta tasa de errores. Revisa worker o recursos."
+```
+
+---
+
+### **Fase 13: Integración con Otros Skills**
+
+#### **13.1 Relación con SmartScanner:**
+
+**Flujo Integrado:**
+```
+1. SmartScanner escanea y devuelve lista de archivos
+2. ParallelOrchestrator procesa archivos en paralelo
+3. Cada worker usa metadatos del scanner
+```
+
+**Optimización:**
+- Scanner puede entregar archivos vía stream
+- Parallel procesa mientras scanner continúa
+- Pipeline natural entre ambos
+
+---
+
+#### **13.2 Relación con IncrementalCache:**
+
+**Flujo Integrado:**
+```
+1. IncrementalCache clasifica archivos (nuevos, modificados, sin cambios)
+2. ParallelOrchestrator procesa solo los que necesitan procesamiento
+3. IncrementalCache actualiza caché con resultados
+```
+
+**Optimización:**
+- Evita reprocesar archivos sin cambios
+- Paralelismo solo sobre lo necesario
+- Máxima eficiencia combinada
+
+---
+
+#### **13.3 Relación con Progress Orchestrator:**
+
+**Integración Nativa:**
+- ParallelOrchestrator usa Progress Orchestrator para mostrar avance
+- MultiProgress para ver workers individuales
+- ETA y velocidad calculados automáticamente
+- Reporte de éxitos/fallos en tiempo real
+
+---
+
+#### **13.4 Relación con Bootstrap Inteligente:**
+
+**Durante Bootstrap:**
+- Bootstrap usa ParallelOrchestrator para instalación de dependencias
+- Descarga paralela de paquetes
+- Compilación paralela de módulos
+
+---
+
+#### **13.5 Relación con Menús Adaptativos:**
+
+**En el Menú:**
+- Opción para configurar workers
+- Mostrar métricas de última ejecución
+- Presets de paralelismo según tipo de operación
+
+---
+
+### **Fase 14: Implementación por Lenguaje**
+
+#### **Node.js:**
+```javascript
+// Librerías recomendadas:
+// - p-map (parallel map simple)
+// - p-limit (limitar concurrencia)
+// - worker_threads (hilos nativos)
+// - cluster (procesos para CPU-bound)
+// - async (control de flujo)
+// - piscina (pool de workers)
+```
+
+**Ejemplo:**
+```javascript
+const { Worker } = require('worker_threads');
+const pMap = require('p-map');
+
+const results = await pMap(files, async (file) => {
+  return await processFile(file);
+}, {
+  concurrency: 4,
+  stopOnError: false
+});
+```
+
+---
+
+#### **Python:**
+```python
+# Librerías recomendadas:
+# - concurrent.futures (ThreadPoolExecutor, ProcessPoolExecutor)
+# - asyncio (async/await nativo)
+# - multiprocessing (procesos)
+# - joblib (paralelismo simple)
+# - ray (distribuido)
+# - pebble (pool avanzado)
+```
+
+**Ejemplo:**
+```python
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+with ThreadPoolExecutor(max_workers=4) as executor:
+    futures = {executor.submit(process, f): f for f in files}
+    results = {}
+    for future in as_completed(futures):
+        results[futures[future]] = future.result()
+```
+
+---
+
+#### **Rust:**
+```rust
+// Crates recomendados:
+// - rayon (paralelismo data-parallel, muy popular)
+// - tokio (async runtime)
+// - crossbeam (estructuras concurrentes)
+// - flume (canales MPSC)
+// - async-std (async alternativo)
+```
+
+**Ejemplo:**
+```rust
+use rayon::prelude::*;
+
+let results: Vec<_> = files
+    .par_iter()
+    .map(|f| process(f))
+    .collect();
+```
+
+---
+
+#### **Go:**
+```go
+// Paquetes recomendados:
+// - goroutines nativas
+// - sync.WaitGroup, sync.Mutex
+// - channels para comunicación
+// - errgroup (golang.org/x/sync/errgroup)
+// - workerpool (github.com/gammazero/workerpool)
+```
+
+**Ejemplo:**
+```go
+var g errgroup.Group
+g.SetLimit(4)
+
+for _, f := range files {
+    f := f
+    g.Go(func() error {
+        return process(f)
+    })
+}
+
+err := g.Wait()
+```
+
+---
+
+#### **Bash/Shell:**
+```bash
+# Herramientas recomendadas:
+# - GNU parallel (paralelismo en shell)
+# - xargs -P (paralelismo simple)
+# - background jobs (&, wait)
+# - xjobs (alternativa a parallel)
+```
+
+**Ejemplo:**
+```bash
+# Con GNU parallel
+parallel -j 4 convert {} {.}.png ::: *.jpg
+
+# Con xargs
+find . -name "*.jpg" | xargs -P 4 -I {} convert {} {}.png
+```
+
+---
+
+### **Fase 15: Casos de Uso y Ejemplos**
+
+#### **Ejemplo 1: Conversor de Imágenes**
+
+```javascript
+const result = await parallelMap(
+  imageFiles,
+  async (file) => {
+    const image = await loadImage(file);
+    const converted = await convertTo(image, 'png');
+    await saveFile(converted, getOutputPath(file));
+    return { input: file, success: true };
+  },
+  {
+    maxWorkers: 4,
+    preserveOrder: true,
+    retry: { maxAttempts: 2 },
+    errorHandling: { strategy: 'continue' }
+  }
+);
+
+console.log(`✅ ${result.successes} convertidas, ❌ ${result.failures} fallaron`);
+```
+
+---
+
+#### **Ejemplo 2: Descarga de Archivos**
+
+```javascript
+const result = await parallelMap(
+  urls,
+  async (url) => {
+    const response = await fetch(url);
+    const buffer = await response.arrayBuffer();
+    await writeFile(getFilename(url), buffer);
+    return { url, size: buffer.byteLength };
+  },
+  {
+    maxWorkers: 8,  // IO-bound, muchos workers
+    preserveOrder: false,  // orden no importa
+    retry: { strategy: 'exponential', maxAttempts: 5 }
+  }
+);
+```
+
+---
+
+#### **Ejemplo 3: Procesamiento de Datos**
+
+```javascript
+const total = await parallelReduce(
+  dataFiles,
+  async (file) => {
+    const data = await readFile(file);
+    return calculateSum(data);
+  },
+  (acc, sum) => acc + sum,
+  0,
+  {
+    maxWorkers: 'auto',  // CPU-bound, detectar automáticamente
+    batchSize: 10
+  }
+);
+```
+
+---
+
+#### **Ejemplo 4: Pipeline de Transformación**
+
+```javascript
+const pipeline = parallelPipeline([
+  { worker: readFiles, workers: 8, type: 'io' },
+  { worker: validate, workers: 4, type: 'cpu' },
+  { worker: transform, workers: 2, type: 'cpu' },
+  { worker: writeFiles, workers: 8, type: 'io' }
+]);
+
+await pipeline.process(files, {
+  bufferSize: 100,  // buffer entre etapas
+  backpressure: true
+});
+```
+
+---
+
+### **Fase 16: Testing y Debugging**
+
+#### **16.1 Modo Secuencial para Testing:**
+
+```javascript
+const result = await parallelMap(items, worker, {
+  debug: {
+    sequentialMode: true,  // fuerza modo secuencial
+    deterministicOrder: true  // orden determinista
+  }
+});
+```
+
+**Ventajas:**
+- Resultados reproducibles
+- Fácil debugging con breakpoints
+- Sin race conditions
+- Logs en orden predecible
+
+---
+
+#### **16.2 Detección de Problemas:**
+
+**Herramientas de Diagnóstico:**
+- Logs detallados de cada worker
+- Timeline visual de ejecución
+- Detección de deadlocks
+- Detección de starvation
+- Análisis de contención
+
+**Reporte de Debug:**
+```
+🔍 Diagnóstico de Paralelismo:
+  ├─ Workers creados: 4
+  ├─ Tareas completadas: 1000
+  ├─ Tiempo promedio por tarea: 45ms
+  ├─ Worker más lento: Worker 2 (avg 67ms)
+  ├─ Worker más rápido: Worker 1 (avg 32ms)
+  ├─ Desbalance de carga: 52% ⚠️
+  └─ Recomendación: activar work-stealing
+```
+
+---
+
+### **Fase 17: Beneficios del Sistema**
+
+✅ **Universal:** Aplica a cualquier tipo de procesamiento paralelo  
+✅ **Reutilizable:** Una vez implementado, sirve para múltiples aplicaciones  
+✅ **Inteligente:** Detecta automáticamente el tipo de operación y estrategia óptima  
+✅ **Configurable:** Cada aspecto puede personalizarse según necesidades  
+✅ **Robusto:** Maneja errores, reintentos y cancelaciones correctamente  
+✅ **Eficiente:** Control de memoria y backpressure previenen saturación  
+✅ **Ordenado:** Preserva orden original cuando es importante  
+✅ **Seguro:** Previene race conditions y deadlocks  
+✅ **Observable:** Métricas completas y comparación con modo secuencial  
+✅ **Recuperable:** Cancelación graceful con estado parcial  
+✅ **Integrable:** Trabaja con Progress Orchestrator, SmartScanner, IncrementalCache  
+✅ **Multiplataforma:** Funciona en Windows, Linux, macOS  
+✅ **Multi-lenguaje:** Implementaciones para Node.js, Python, Rust, Go, Bash  
+✅ **Testeable:** Modo secuencial para debugging y tests  
+✅ **Adaptable:** Ajusta workers dinámicamente según carga  
+✅ **Escalable:** Funciona desde pocos elementos hasta millones  
+✅ **Transparente:** El usuario no necesita entender concurrencia  
+
+---
+
+### **Conclusión:**
+
+Esta skill transforma el procesamiento paralelo de una tarea compleja y propensa a errores en un sistema inteligente, robusto y reutilizable. El ParallelOrchestrator Universal puede integrarse en cualquier aplicación que necesite procesar colecciones de elementos concurrentemente, manteniendo la misma interfaz y comportamiento aunque cambie el caso de uso específico. Se integra perfectamente con los otros skills (Bootstrap, Menús Adaptativos, Banners, Progress Orchestrator, SmartScanner, IncrementalCache) para crear aplicaciones CLI completas, profesionales y con excelente experiencia de usuario.
+
+El sistema es lo suficientemente flexible para usarse en conversores de imágenes, descargadores de archivos, procesadores de datos, compiladores, analizadores de documentos, sincronizadores, sistemas de build, y cualquier otra aplicación que necesite "hacer muchas cosas a la vez de forma segura y eficiente". La combinación de detección automática de estrategia, manejo robusto de errores, preservación de orden, control de memoria y métricas detalladas lo convierte en una solución enterprise-grade para concurrencia que elimina la complejidad del paralelismo para el desarrollador de aplicaciones.

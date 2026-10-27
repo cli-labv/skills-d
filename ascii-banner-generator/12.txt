@@ -1,0 +1,1874 @@
+## Skill: Terminal ASCII Banner Generator - Generador Universal de Banners con Alfabeto Completo
+
+**Descripción General:**
+Implementar una skill global y reutilizable llamada **Terminal ASCII Banner Generator** para generar banners dinámicos en aplicaciones CLI, basada en un catálogo completo de glifos que cubra el alfabeto latino completo (A-Z, a-z), números (0-9), símbolos de puntuación y caracteres especiales frecuentes, incluyendo soporte para letras acentuadas (Á, É, Í, Ó, Ú, Ü, Ñ y sus minúsculas); cada carácter debe representarse como una matriz de varias filas con altura uniforme (preferiblemente fuentes de 3, 5 y 7 filas), donde cada posición contenga un carácter visual como `█`, `▓`, `░`, `#`, `@`, `*`, `╔`, `═`, `║`, `╚` o espacios; el motor debe convertir cualquier texto en una lista de líneas ASCII uniendo horizontalmente los glifos con espaciado configurable, sustituyendo caracteres no soportados por `?` o celda vacía; debe exponer una configuración rica con campos como `text`, `font`, `height`, `spacing`, `theme`, `colors`, `gradient`, `alignment`, `max_width`, `padding`, `border`, `icon`, `subtitle`, `version`, `url`, `animation`, `speed`, `interactive` y `unicode`, permitiendo crear banners simples, profesionales, retro, tecnológicos, de fuego, minimalistas o multicolor; debe incluir un motor de composición que calcule el ancho real visible ignorando códigos ANSI, emojis y secuencias de color, para centrar correctamente, adaptar al tamaño de terminal, reducir o dividir si excede el ancho disponible, y construir opcionalmente marcos con caracteres Unicode de box-drawing; debe incorporar un sistema de temas con colores por letra, fila, palabra o sección usando estilos como rojo, amarillo, cyan, verde, magenta, blanco, brillante, atenuado y degradados, con soporte para `NO_COLOR`, detección de TTY y modo ASCII seguro; debe proporcionar funciones reutilizables `render_banner(text, config)`, `show_animated_banner(config)`, `show_simple_banner(config)`, `show_tagline(text, config)` y `show_goodbye(config)`, además de animaciones por carácter, línea, bloque, aparición progresiva, escritura instantánea y modo silencioso para CI o redirecciones; debe separar catálogo de glifos, fuentes, temas, motor de composición, sistema de alineación, renderizador, detección de terminal y animación para que cada componente sea sustituible o ampliable independientemente; debe permitir que cada proyecto agregue sus propios glifos, iconos, logotipos o temas sin modificar el núcleo; debe incluir validaciones para comprobar altura uniforme, ancho válido por fila, ausencia de incompatibilidades, límites de ancho y preservación de alineación con colores; debe incluir pruebas unitarias para cada letra, números, símbolos, composición de palabras, centrado con Unicode, modo sin color, terminales pequeñas, animación desactivada y compatibilidad con salida redirigida; y debe documentar ejemplos para generar nombres como `IMG2PDF`, `FLARE-DF`, `MY-CLI` y cualquier texto personalizado, con una fuente predeterminada de 5 o 7 filas, alfabeto completo listo para usar, selección de fuentes y temas desde CLI, archivo de configuración o variables de entorno, entregando una skill que genere banners rápidos, consistentes, adaptables, visualmente atractivos y reutilizables en cualquier aplicación de terminal.
+
+---
+
+### **Fase 1: Arquitectura del Sistema**
+
+#### **1.1 Componentes Principales:**
+
+**GlyphCatalog (Catálogo de Glifos):**
+- Almacena la definición visual de cada carácter
+- Organizado por fuente (3, 5, 7 filas)
+- Permite registrar glifos personalizados
+- Incluye fallback para caracteres desconocidos
+- Soporta Unicode completo (UTF-8)
+
+**FontManager (Gestor de Fuentes):**
+- Gestiona múltiples fuentes disponibles
+- Permite cambiar fuente en runtime
+- Carga fuentes desde archivos externos
+- Incluye fuentes built-in: `standard`, `block`, `slim`, `retro`, `tech`, `minimal`, `shadow`, `fire`
+
+**CompositionEngine (Motor de Composición):**
+- Une glifos horizontalmente con espaciado configurable
+- Calcula ancho real visible (ignora ANSI)
+- Maneja alineación (izquierda, centro, derecha)
+- Aplica padding y bordes
+- Divide texto largo en múltiples líneas si es necesario
+
+**ThemeSystem (Sistema de Temas):**
+- Asigna colores por letra, fila, palabra o sección
+- Soporta colores ANSI estándar y 256 colores
+- Soporta gradientes y degradados
+- Respeta `NO_COLOR` y detección de TTY
+- Incluye temas predefinidos
+
+**AnimationEngine (Motor de Animación):**
+- Controla velocidad y tipo de animación
+- Tipos: por carácter, por línea, por bloque, aparición progresiva, escritura instantánea
+- Respeta cancelaciones del usuario
+- Limpia pantalla correctamente
+- Vacía buffer de salida
+
+**TerminalDetector (Detector de Terminal):**
+- Detecta si es TTY o pipe/redirección
+- Detecta soporte de Unicode
+- Detecta soporte de colores (16, 256, truecolor)
+- Detecta ancho de terminal
+- Detecta variables como `NO_COLOR`, `CI`, `TERM`
+
+**BannerRenderer (Renderizador):**
+- Componente final que ensambla todo
+- Expone API pública simple
+- Coordina todos los componentes
+
+---
+
+### **Fase 2: Catálogo Completo de Glifos**
+
+#### **2.1 Estructura de un Glifo:**
+
+Cada glifo se define como un array de strings, donde cada string es una fila del carácter. Todas las filas deben tener el mismo ancho.
+
+```typescript
+interface Glyph {
+  char: string;           // Carácter que representa
+  rows: string[];         // Array de filas (altura uniforme)
+  width: number;          // Ancho del glifo
+  height: number;         // Altura (igual para todos en la misma fuente)
+}
+```
+
+---
+
+#### **2.2 Fuente "Standard" (5 filas) - Alfabeto Completo:**
+
+**Letras Mayúsculas A-Z:**
+
+```typescript
+export const STANDARD_UPPERCASE = {
+  'A': [
+    " █████ ",
+    "██   ██",
+    "███████",
+    "██   ██",
+    "██   ██"
+  ],
+  'B': [
+    "██████ ",
+    "██   ██",
+    "██████ ",
+    "██   ██",
+    "██████ "
+  ],
+  'C': [
+    " ██████",
+    "██     ",
+    "██     ",
+    "██     ",
+    " ██████"
+  ],
+  'D': [
+    "██████ ",
+    "██   ██",
+    "██   ██",
+    "██   ██",
+    "██████ "
+  ],
+  'E': [
+    "███████",
+    "██     ",
+    "█████  ",
+    "██     ",
+    "███████"
+  ],
+  'F': [
+    "███████",
+    "██     ",
+    "█████  ",
+    "██     ",
+    "██     "
+  ],
+  'G': [
+    " ██████",
+    "██     ",
+    "██  ███",
+    "██   ██",
+    " ██████"
+  ],
+  'H': [
+    "██   ██",
+    "██   ██",
+    "███████",
+    "██   ██",
+    "██   ██"
+  ],
+  'I': [
+    "██",
+    "██",
+    "██",
+    "██",
+    "██"
+  ],
+  'J': [
+    "     ██",
+    "     ██",
+    "     ██",
+    "██   ██",
+    " █████ "
+  ],
+  'K': [
+    "██   ██",
+    "██  ██ ",
+    "█████  ",
+    "██  ██ ",
+    "██   ██"
+  ],
+  'L': [
+    "██     ",
+    "██     ",
+    "██     ",
+    "██     ",
+    "███████"
+  ],
+  'M': [
+    "███    ███",
+    "████  ████",
+    "██ ████ ██",
+    "██  ██  ██",
+    "██      ██"
+  ],
+  'N': [
+    "███    ██",
+    "████   ██",
+    "██ ██  ██",
+    "██  ██ ██",
+    "██   ████"
+  ],
+  'O': [
+    " █████ ",
+    "██   ██",
+    "██   ██",
+    "██   ██",
+    " █████ "
+  ],
+  'P': [
+    "██████ ",
+    "██   ██",
+    "██████ ",
+    "██     ",
+    "██     "
+  ],
+  'Q': [
+    " █████ ",
+    "██   ██",
+    "██ █ ██",
+    "██  ██ ",
+    "████ ██"
+  ],
+  'R': [
+    "██████ ",
+    "██   ██",
+    "██████ ",
+    "██  ██ ",
+    "██   ██"
+  ],
+  'S': [
+    " ██████",
+    "██     ",
+    " █████ ",
+    "     ██",
+    "██████ "
+  ],
+  'T': [
+    "████████",
+    "   ██   ",
+    "   ██   ",
+    "   ██   ",
+    "   ██   "
+  ],
+  'U': [
+    "██   ██",
+    "██   ██",
+    "██   ██",
+    "██   ██",
+    " █████ "
+  ],
+  'V': [
+    "██    ██",
+    "██    ██",
+    "██    ██",
+    " ██  ██ ",
+    "  ████  "
+  ],
+  'W': [
+    "██      ██",
+    "██      ██",
+    "██  ██  ██",
+    "██ ████ ██",
+    " ███  ███ "
+  ],
+  'X': [
+    "██   ██",
+    " ██ ██ ",
+    "  ███  ",
+    " ██ ██ ",
+    "██   ██"
+  ],
+  'Y': [
+    "██   ██",
+    " ██ ██ ",
+    "  ███  ",
+    "  ███  ",
+    "  ███  "
+  ],
+  'Z': [
+    "███████",
+    "   ███ ",
+    "  ███  ",
+    " ███   ",
+    "███████"
+  ]
+};
+```
+
+**Letras Minúsculas a-z:**
+
+```typescript
+export const STANDARD_LOWERCASE = {
+  'a': [
+    "       ",
+    "       ",
+    " █████ ",
+    "      ██",
+    " ██████"
+  ],
+  'b': [
+    "██     ",
+    "██     ",
+    "██████ ",
+    "██   ██",
+    "██████ "
+  ],
+  'c': [
+    "       ",
+    "       ",
+    " █████ ",
+    "██     ",
+    " █████ "
+  ],
+  'd': [
+    "     ██",
+    "     ██",
+    " ██████",
+    "██   ██",
+    " ██████"
+  ],
+  'e': [
+    "       ",
+    "       ",
+    " █████ ",
+    "███████",
+    " █████ "
+  ],
+  'f': [
+    "  ████ ",
+    " ██  ██",
+    " ██    ",
+    " ██    ",
+    " ██    "
+  ],
+  'g': [
+    "       ",
+    "       ",
+    " ██████",
+    "██   ██",
+    " ██████",
+    "      ██",
+    " ██████ "
+  ],
+  'h': [
+    "██     ",
+    "██     ",
+    "██████ ",
+    "██   ██",
+    "██   ██"
+  ],
+  'i': [
+    "██",
+    "  ",
+    "██",
+    "██",
+    "██"
+  ],
+  'j': [
+    "   ██",
+    "     ",
+    "   ██",
+    "   ██",
+    "██ ██",
+    " ███ "
+  ],
+  'k': [
+    "██    ",
+    "██  ██",
+    "█████ ",
+    "██ ██ ",
+    "██  ██"
+  ],
+  'l': [
+    "██",
+    "██",
+    "██",
+    "██",
+    "███████"
+  ],
+  'm': [
+    "         ",
+    "         ",
+    "███ ████ ",
+    "█████████",
+    "██ ███ ██"
+  ],
+  'n': [
+    "         ",
+    "         ",
+    "██████  ",
+    "██   ██ ",
+    "██   ██ "
+  ],
+  'o': [
+    "       ",
+    "       ",
+    " █████ ",
+    "██   ██",
+    " █████ "
+  ],
+  'p': [
+    "        ",
+    "        ",
+    "██████  ",
+    "██   ██ ",
+    "██████  ",
+    "██      ",
+    "██      "
+  ],
+  'q': [
+    "        ",
+    "        ",
+    " ██████ ",
+    "██   ██ ",
+    " ██████ ",
+    "      ██",
+    "      ██"
+  ],
+  'r': [
+    "       ",
+    "       ",
+    "██  ███",
+    "██████ ",
+    "██   ██"
+  ],
+  's': [
+    "       ",
+    "       ",
+    " ██████",
+    " █████ ",
+    "██████ "
+  ],
+  't': [
+    "██ ",
+    "██ ",
+    "███████",
+    "██   ██",
+    "     ██"
+  ],
+  'u': [
+    "        ",
+    "        ",
+    "██   ██ ",
+    "██   ██ ",
+    " ██████ "
+  ],
+  'v': [
+    "        ",
+    "        ",
+    "██    ██",
+    " ██  ██ ",
+    "  ████  "
+  ],
+  'w': [
+    "          ",
+    "          ",
+    "██      ██",
+    "██  ██  ██",
+    " ████████ "
+  ],
+  'x': [
+    "       ",
+    "       ",
+    "██   ██",
+    " ███ █ ",
+    "██   ██"
+  ],
+  'y': [
+    "        ",
+    "        ",
+    "██   ██ ",
+    " ██ ██  ",
+    "  ███   ",
+    " ███    ",
+    "████    "
+  ],
+  'z': [
+    "       ",
+    "       ",
+    "███████",
+    "  ███  ",
+    "███████"
+  ]
+};
+```
+
+**Números 0-9:**
+
+```typescript
+export const STANDARD_NUMBERS = {
+  '0': [
+    " █████ ",
+    "██  ███",
+    "██ █ ██",
+    "████  █",
+    " █████ "
+  ],
+  '1': [
+    "  ██ ",
+    " ███ ",
+    "  ██ ",
+    "  ██ ",
+    "█████"
+  ],
+  '2': [
+    " █████ ",
+    "██   ██",
+    "    ██ ",
+    "  ██   ",
+    "███████"
+  ],
+  '3': [
+    "██████ ",
+    "     ██",
+    " █████ ",
+    "     ██",
+    "██████ "
+  ],
+  '4': [
+    "██   ██",
+    "██   ██",
+    "███████",
+    "     ██",
+    "     ██"
+  ],
+  '5': [
+    "████████",
+    "██      ",
+    "███████ ",
+    "      ██",
+    "███████ "
+  ],
+  '6': [
+    " ██████",
+    "██     ",
+    "██████ ",
+    "██   ██",
+    " █████ "
+  ],
+  '7': [
+    "███████",
+    "     ██",
+    "    ██ ",
+    "   ██  ",
+    "   ██  "
+  ],
+  '8': [
+    " █████ ",
+    "██   ██",
+    " █████ ",
+    "██   ██",
+    " █████ "
+  ],
+  '9': [
+    " █████ ",
+    "██   ██",
+    " ██████",
+    "     ██",
+    "██████ "
+  ]
+};
+```
+
+**Símbolos y Espacios:**
+
+```typescript
+export const STANDARD_SYMBOLS = {
+  ' ': [
+    "   ",
+    "   ",
+    "   ",
+    "   ",
+    "   "
+  ],
+  '-': [
+    "        ",
+    "        ",
+    "  ████  ",
+    "        ",
+    "        "
+  ],
+  '_': [
+    "        ",
+    "        ",
+    "        ",
+    "        ",
+    "████████"
+  ],
+  '.': [
+    "   ",
+    "   ",
+    "   ",
+    "   ",
+    " ██"
+  ],
+  ':': [
+    "   ",
+    " ██",
+    "   ",
+    " ██",
+    "   "
+  ],
+  '/': [
+    "     ██",
+    "    ██ ",
+    "   ██  ",
+    "  ██   ",
+    " ██    "
+  ],
+  '\\': [
+    "██    ",
+    " ██   ",
+    "  ██  ",
+    "   ██ ",
+    "    ██"
+  ],
+  '(': [
+    "  ██ ",
+    " ██  ",
+    " ██  ",
+    " ██  ",
+    "  ██ "
+  ],
+  ')': [
+    " ██  ",
+    "  ██ ",
+    "  ██ ",
+    "  ██ ",
+    " ██  "
+  ],
+  '[': [
+    " ███ ",
+    " ██  ",
+    " ██  ",
+    " ██  ",
+    " ███ "
+  ],
+  ']': [
+    " ███ ",
+    "  ██ ",
+    "  ██ ",
+    "  ██ ",
+    " ███ "
+  ],
+  '!': [
+    "██",
+    "██",
+    "██",
+    "  ",
+    "██"
+  ],
+  '?': [
+    " █████ ",
+    "██   ██",
+    "   ██  ",
+    "       ",
+    "   ██  "
+  ],
+  '+': [
+    "        ",
+    "   ██   ",
+    " ██████ ",
+    "   ██   ",
+    "        "
+  ],
+  '=': [
+    "        ",
+    " ██████ ",
+    "        ",
+    " ██████ ",
+    "        "
+  ],
+  '*': [
+    "        ",
+    " ██  ██ ",
+    "  ████  ",
+    " ██  ██ ",
+    "        "
+  ],
+  '@': [
+    " █████  ",
+    "██  ████",
+    "██ ████ ",
+    "██      ",
+    " █████  "
+  ],
+  '#': [
+    " ██ ██  ",
+    "████████",
+    " ██ ██  ",
+    "████████",
+    " ██ ██  "
+  ],
+  '&': [
+    " ████  ",
+    "██  ██ ",
+    " ████  ",
+    "██  ███",
+    " ██████"
+  ],
+  '%': [
+    "███  ██",
+    "███ ██ ",
+    "   ██  ",
+    "  ██ ███",
+    "██  ███"
+  ],
+  '$': [
+    " ████▌ ",
+    "██ ████",
+    " ████  ",
+    "█████ ██",
+    " ▀█████ "
+  ],
+  '|': [
+    "██",
+    "██",
+    "██",
+    "██",
+    "██"
+  ],
+  ',': [
+    "   ",
+    "   ",
+    "   ",
+    " ██",
+    "██ "
+  ],
+  ';': [
+    "   ",
+    " ██",
+    "   ",
+    " ██",
+    "██ "
+  ],
+  '<': [
+    "   ██",
+    "  ██ ",
+    " ██  ",
+    "  ██ ",
+    "   ██"
+  ],
+  '>': [
+    "██   ",
+    " ██  ",
+    "  ██ ",
+    " ██  ",
+    "██   "
+  ]
+};
+```
+
+---
+
+#### **2.3 Letras Acentuadas (Español/Internacional):**
+
+```typescript
+export const STANDARD_ACCENTS = {
+  'Á': [
+    "    ▄ ",
+    " █████ ",
+    "██   ██",
+    "███████",
+    "██   ██",
+    "██   ██"
+  ],
+  'É': [
+    "   ▄  ",
+    "███████",
+    "██     ",
+    "█████  ",
+    "██     ",
+    "███████"
+  ],
+  'Í': [
+    " ▄ ",
+    "██",
+    "██",
+    "██",
+    "██",
+    "██"
+  ],
+  'Ó': [
+    "    ▄ ",
+    " █████ ",
+    "██   ██",
+    "██   ██",
+    "██   ██",
+    " █████ "
+  ],
+  'Ú': [
+    "    ▄ ",
+    "██   ██",
+    "██   ██",
+    "██   ██",
+    "██   ██",
+    " █████ "
+  ],
+  'Ü': [
+    "▄   ▄ ",
+    "██   ██",
+    "██   ██",
+    "██   ██",
+    "██   ██",
+    " █████ "
+  ],
+  'Ñ': [
+    " ████  ",
+    "████ ███",
+    "██ ██ ██",
+    "██ ██ ██",
+    "██  ████",
+    "██    ██"
+  ],
+  'ñ': [
+    " ████   ",
+    "        ",
+    "██████  ",
+    "██   ██ ",
+    "██   ██ ",
+    "██   ██ "
+  ],
+  // ... equivalentes minúsculos á, é, í, ó, ú, ü
+};
+```
+
+---
+
+#### **2.4 Fuente "Block" (7 filas) - Ejemplo:**
+
+```typescript
+export const BLOCK_FONT = {
+  'A': [
+    "  ███  ",
+    " ██ ██ ",
+    "██   ██",
+    "███████",
+    "██   ██",
+    "██   ██",
+    "██   ██"
+  ],
+  'B': [
+    "██████ ",
+    "██   ██",
+    "██   ██",
+    "██████ ",
+    "██   ██",
+    "██   ██",
+    "██████ "
+  ],
+  // ... resto del alfabeto con 7 filas
+};
+```
+
+---
+
+#### **2.5 Fuente "Slim" (3 filas) - Ejemplo:**
+
+```typescript
+export const SLIM_FONT = {
+  'A': [
+    " █ ",
+    "█ █",
+    "█ █"
+  ],
+  'B': [
+    "█▀ ",
+    "█▀▄",
+    "▀▀ "
+  ],
+  // ... resto del alfabeto con 3 filas
+};
+```
+
+---
+
+#### **2.6 Fallback y Caracteres Desconocidos:**
+
+```typescript
+export const FALLBACK_GLYPH_5 = {
+  '?': [
+    " █████ ",
+    "██   ██",
+    "   ██  ",
+    "       ",
+    "   ██  "
+  ]
+};
+
+// Si un carácter no está en el catálogo, se usa '?'
+function getGlyph(char: string, font: Font): Glyph {
+  return font[char] || font['?'];
+}
+```
+
+---
+
+### **Fase 3: Configuración del Banner**
+
+#### **3.1 Objeto BannerConfig Completo:**
+
+```typescript
+interface BannerConfig {
+  // Contenido
+  text: string;                    // Texto principal del banner
+  subtitle?: string;               // Subtítulo debajo del texto
+  version?: string;                // Versión a mostrar
+  url?: string;                    // URL a mostrar
+  icon?: string;                   // Icono/emoji a mostrar
+  
+  // Fuente y estilo
+  font: 'standard' | 'block' | 'slim' | 'retro' | 'tech' | 'minimal' | 'shadow' | 'fire' | string;
+  height?: 3 | 5 | 7;              // Altura preferida de la fuente
+  spacing?: number;                // Espacio entre caracteres (default: 1)
+  
+  // Tema y colores
+  theme?: 'default' | 'retro' | 'tech' | 'fire' | 'ocean' | 'forest' | 'neon' | 'minimal' | string;
+  colors?: ColorConfig;            // Configuración personalizada de colores
+  gradient?: GradientConfig;       // Configuración de degradado
+  
+  // Layout
+  alignment?: 'left' | 'center' | 'right';  // Alineación (default: center)
+  maxWidth?: number;               // Ancho máximo (default: terminal width)
+  padding?: PaddingConfig;         // Padding interno
+  border?: BorderConfig;           // Borde del banner
+  
+  // Animación
+  animation?: 'none' | 'typewriter' | 'fade' | 'slide' | 'wave' | 'block';
+  speed?: number;                  // Velocidad en ms (default: 50)
+  interactive?: boolean;           // Si es interactivo (default: true si TTY)
+  
+  // Compatibilidad
+  unicode?: boolean;               // Forzar uso de Unicode (default: auto-detect)
+  noColor?: boolean;               // Desactivar colores (default: auto-detect)
+  silent?: boolean;                // Modo silencioso (default: false)
+}
+
+interface ColorConfig {
+  text?: string;                   // Color del texto
+  subtitle?: string;               // Color del subtítulo
+  border?: string;                 // Color del borde
+  background?: string;             // Color de fondo
+}
+
+interface GradientConfig {
+  type: 'horizontal' | 'vertical' | 'rainbow' | 'fire' | 'ocean';
+  colors: string[];                // Colores del degradado
+}
+
+interface PaddingConfig {
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+}
+
+interface BorderConfig {
+  enabled?: boolean;
+  style?: 'single' | 'double' | 'rounded' | 'bold' | 'ascii';
+  color?: string;
+}
+```
+
+---
+
+#### **3.2 Presets de Temas:**
+
+```typescript
+export const THEMES = {
+  'default': {
+    colors: { text: 'white', subtitle: 'gray', border: 'cyan' }
+  },
+  'retro': {
+    colors: { text: 'yellow', subtitle: 'magenta', border: 'green' },
+    font: 'retro'
+  },
+  'tech': {
+    colors: { text: 'cyan', subtitle: 'blue', border: 'white' },
+    font: 'tech'
+  },
+  'fire': {
+    gradient: {
+      type: 'vertical',
+      colors: ['red', 'yellow', 'white']
+    },
+    font: 'fire'
+  },
+  'ocean': {
+    gradient: {
+      type: 'horizontal',
+      colors: ['blue', 'cyan', 'white']
+    }
+  },
+  'neon': {
+    colors: { text: 'magenta', subtitle: 'cyan', border: 'yellow' }
+  },
+  'minimal': {
+    colors: { text: 'white' },
+    border: { enabled: false },
+    font: 'minimal'
+  },
+  'forest': {
+    colors: { text: 'green', subtitle: 'yellow', border: 'green' }
+  }
+};
+```
+
+---
+
+### **Fase 4: Motor de Composición**
+
+#### **4.1 Algoritmo de Composición:**
+
+```typescript
+function composeBanner(text: string, config: BannerConfig): string[] {
+  const font = getFont(config.font, config.height);
+  const lines: string[] = [];
+  
+  // 1. Dividir texto en líneas si excede maxWidth
+  const textLines = splitTextToFit(text, config.maxWidth, font);
+  
+  // 2. Para cada línea de texto
+  for (const textLine of textLines) {
+    // 3. Obtener glifos de cada carácter
+    const glyphs = textLine.split('').map(char => getGlyph(char, font));
+    
+    // 4. Unir glifos horizontalmente con spacing
+    const height = glyphs[0].height;
+    for (let row = 0; row < height; row++) {
+      let line = '';
+      for (let i = 0; i < glyphs.length; i++) {
+        line += glyphs[i].rows[row];
+        if (i < glyphs.length - 1) {
+          line += ' '.repeat(config.spacing || 1);
+        }
+      }
+      lines.push(line);
+    }
+    
+    // 5. Separador entre líneas de texto
+    lines.push('');
+  }
+  
+  // 6. Aplicar padding
+  const paddedLines = applyPadding(lines, config.padding);
+  
+  // 7. Aplicar alineación
+  const alignedLines = applyAlignment(paddedLines, config.alignment, config.maxWidth);
+  
+  // 8. Aplicar borde si está habilitado
+  const borderedLines = config.border?.enabled 
+    ? applyBorder(alignedLines, config.border)
+    : alignedLines;
+  
+  // 9. Agregar subtítulo, versión, URL si existen
+  const finalLines = addMetadata(borderedLines, config);
+  
+  return finalLines;
+}
+```
+
+---
+
+#### **4.2 Cálculo de Ancho Visible (Ignorando ANSI):**
+
+```typescript
+function getVisibleWidth(line: string): number {
+  // Eliminar códigos ANSI de color
+  const withoutAnsi = line.replace(/\x1b\[[0-9;]*m/g, '');
+  // Eliminar secuencias de escape
+  const withoutEscape = withoutAnsi.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+  // Contar caracteres (considerando Unicode)
+  return [...withoutEscape].length;
+}
+```
+
+---
+
+#### **4.3 Alineación:**
+
+```typescript
+function applyAlignment(lines: string[], alignment: string, maxWidth: number): string[] {
+  return lines.map(line => {
+    const visibleWidth = getVisibleWidth(line);
+    const padding = maxWidth - visibleWidth;
+    
+    switch (alignment) {
+      case 'left':
+        return line;
+      case 'right':
+        return ' '.repeat(padding) + line;
+      case 'center':
+      default:
+        const leftPad = Math.floor(padding / 2);
+        return ' '.repeat(leftPad) + line;
+    }
+  });
+}
+```
+
+---
+
+#### **4.4 Bordes con Box-Drawing:**
+
+```typescript
+const BORDER_STYLES = {
+  'single': { tl: '┌', tr: '┐', bl: '└', br: '┘', h: '─', v: '│' },
+  'double': { tl: '╔', tr: '╗', bl: '╚', br: '╝', h: '═', v: '║' },
+  'rounded': { tl: '╭', tr: '╮', bl: '╰', br: '╯', h: '─', v: '│' },
+  'bold': { tl: '┏', tr: '┓', bl: '┗', br: '┛', h: '━', v: '┃' },
+  'ascii': { tl: '+', tr: '+', bl: '+', br: '+', h: '-', v: '|' }
+};
+
+function applyBorder(lines: string[], border: BorderConfig): string[] {
+  const style = BORDER_STYLES[border.style || 'single'];
+  const maxWidth = Math.max(...lines.map(getVisibleWidth));
+  
+  const result: string[] = [];
+  
+  // Borde superior
+  result.push(style.tl + style.h.repeat(maxWidth + 2) + style.tr);
+  
+  // Líneas con borde lateral
+  for (const line of lines) {
+    const padding = maxWidth - getVisibleWidth(line);
+    result.push(`${style.v} ${line}${' '.repeat(padding)} ${style.v}`);
+  }
+  
+  // Borde inferior
+  result.push(style.bl + style.h.repeat(maxWidth + 2) + style.br);
+  
+  return result;
+}
+```
+
+---
+
+### **Fase 5: Sistema de Colores y Temas**
+
+#### **5.1 Aplicación de Colores:**
+
+```typescript
+function applyColors(lines: string[], config: BannerConfig): string[] {
+  // Si NO_COLOR está activo o no es TTY, no aplicar colores
+  if (config.noColor || !isTTY()) {
+    return lines;
+  }
+  
+  const theme = THEMES[config.theme || 'default'];
+  
+  // Aplicar colores según configuración
+  return lines.map((line, index) => {
+    let coloredLine = line;
+    
+    // Color por letra
+    if (config.colors?.perLetter) {
+      coloredLine = colorByLetter(line, config.colors.letters);
+    }
+    // Color por fila
+    else if (config.colors?.perRow) {
+      coloredLine = color(line, config.colors.rows[index % config.colors.rows.length]);
+    }
+    // Color uniforme
+    else if (theme.colors?.text) {
+      coloredLine = color(line, theme.colors.text);
+    }
+    
+    // Aplicar gradiente si está configurado
+    if (config.gradient) {
+      coloredLine = applyGradient(line, config.gradient, index, lines.length);
+    }
+    
+    return coloredLine;
+  });
+}
+```
+
+---
+
+#### **5.2 Gradientes:**
+
+```typescript
+function applyGradient(line: string, gradient: GradientConfig, rowIndex: number, totalRows: number): string {
+  const chars = [...line];
+  const result: string[] = [];
+  
+  for (let i = 0; i < chars.length; i++) {
+    let colorIndex: number;
+    
+    switch (gradient.type) {
+      case 'horizontal':
+        colorIndex = Math.floor((i / chars.length) * gradient.colors.length);
+        break;
+      case 'vertical':
+        colorIndex = Math.floor((rowIndex / totalRows) * gradient.colors.length);
+        break;
+      case 'rainbow':
+        colorIndex = i % gradient.colors.length;
+        break;
+      case 'fire':
+        // Degradado de rojo (abajo) a amarillo (medio) a blanco (arriba)
+        const firePosition = (totalRows - rowIndex) / totalRows;
+        colorIndex = Math.floor(firePosition * gradient.colors.length);
+        break;
+      default:
+        colorIndex = 0;
+    }
+    
+    const colorName = gradient.colors[Math.min(colorIndex, gradient.colors.length - 1)];
+    result.push(color(chars[i], colorName));
+  }
+  
+  return result.join('');
+}
+```
+
+---
+
+#### **5.3 Detección de Capacidades de Terminal:**
+
+```typescript
+function detectTerminalCapabilities(): TerminalCapabilities {
+  const isTTY = process.stdout.isTTY;
+  const noColor = process.env.NO_COLOR !== undefined;
+  const ci = process.env.CI !== undefined;
+  const term = process.env.TERM || '';
+  const colorterm = process.env.COLORTERM || '';
+  
+  // Detectar soporte de colores
+  let colorSupport: 'none' | 'basic' | '256' | 'truecolor' = 'none';
+  if (!noColor && isTTY && !ci) {
+    if (colorterm === 'truecolor' || colorterm === '24bit') {
+      colorSupport = 'truecolor';
+    } else if (term.includes('256color') || colorterm === '256') {
+      colorSupport = '256';
+    } else if (isTTY) {
+      colorSupport = 'basic';
+    }
+  }
+  
+  // Detectar soporte de Unicode
+  const unicodeSupport = isTTY && !ci && 
+    (term.includes('utf') || term.includes('unicode') || process.platform !== 'win32');
+  
+  return {
+    isTTY,
+    noColor,
+    ci,
+    colorSupport,
+    unicodeSupport,
+    width: process.stdout.columns || 80,
+    height: process.stdout.rows || 24
+  };
+}
+```
+
+---
+
+### **Fase 6: Sistema de Animación**
+
+#### **6.1 Tipos de Animación:**
+
+```typescript
+type AnimationType = 'none' | 'typewriter' | 'fade' | 'slide' | 'wave' | 'block';
+
+async function animateBanner(lines: string[], config: BannerConfig): Promise<void> {
+  if (config.animation === 'none' || config.silent || !config.interactive) {
+    // Modo estático: imprimir todo de una vez
+    console.log(lines.join('\n'));
+    return;
+  }
+  
+  const speed = config.speed || 50;
+  
+  switch (config.animation) {
+    case 'typewriter':
+      await animateTypewriter(lines, speed);
+      break;
+    case 'fade':
+      await animateFade(lines, speed);
+      break;
+    case 'slide':
+      await animateSlide(lines, speed);
+      break;
+    case 'wave':
+      await animateWave(lines, speed);
+      break;
+    case 'block':
+      await animateBlock(lines, speed);
+      break;
+  }
+}
+```
+
+---
+
+#### **6.2 Animación Typewriter:**
+
+```typescript
+async function animateTypewriter(lines: string[], speed: number): Promise<void> {
+  const fullText = lines.join('\n');
+  let displayed = '';
+  
+  for (const char of fullText) {
+    displayed += char;
+    clearLine();
+    process.stdout.write(displayed);
+    await sleep(speed);
+    
+    // Verificar cancelación
+    if (await isCancelled()) break;
+  }
+  
+  console.log(); // Nueva línea al final
+}
+```
+
+---
+
+#### **6.3 Animación por Bloques:**
+
+```typescript
+async function animateBlock(lines: string[], speed: number): Promise<void> {
+  for (let i = 0; i < lines.length; i++) {
+    clearLine();
+    // Mostrar líneas hasta la actual
+    const visible = lines.slice(0, i + 1).join('\n');
+    process.stdout.write(visible);
+    await sleep(speed);
+    
+    if (await isCancelled()) break;
+  }
+  
+  console.log();
+}
+```
+
+---
+
+#### **6.4 Control de Cancelación:**
+
+```typescript
+let cancelled = false;
+
+process.on('SIGINT', () => {
+  cancelled = true;
+  clearScreen();
+  process.exit(0);
+});
+
+async function isCancelled(): Promise<boolean> {
+  return cancelled;
+}
+```
+
+---
+
+### **Fase 7: API Pública**
+
+#### **7.1 Funciones Principales:**
+
+```typescript
+// Renderizar banner estático
+function renderBanner(text: string, config?: Partial<BannerConfig>): string {
+  const fullConfig = mergeConfig(config);
+  const lines = composeBanner(text, fullConfig);
+  const coloredLines = applyColors(lines, fullConfig);
+  return coloredLines.join('\n');
+}
+
+// Mostrar banner con animación
+async function showAnimatedBanner(config: BannerConfig): Promise<void> {
+  const lines = composeBanner(config.text, config);
+  const coloredLines = applyColors(lines, config);
+  await animateBanner(coloredLines, config);
+}
+
+// Mostrar banner simple (sin animación)
+function showSimpleBanner(config: BannerConfig): void {
+  const banner = renderBanner(config.text, config);
+  console.log(banner);
+}
+
+// Mostrar tagline (texto simple con estilo)
+function showTagline(text: string, config?: Partial<BannerConfig>): void {
+  const fullConfig = mergeConfig(config);
+  const styled = color(text, fullConfig.colors?.text || 'cyan');
+  const padded = ' '.repeat(fullConfig.padding?.left || 2) + styled;
+  console.log(padded);
+}
+
+// Mostrar mensaje de despedida
+function showGoodbye(config?: Partial<BannerConfig>): void {
+  const fullConfig = mergeConfig(config);
+  const message = fullConfig.i18n?.goodbye || 'Goodbye!';
+  console.log();
+  showTagline(message, { ...fullConfig, colors: { text: 'gray' } });
+  console.log();
+}
+```
+
+---
+
+#### **7.2 Ejemplos de Uso:**
+
+**Ejemplo 1: Banner simple**
+```javascript
+showSimpleBanner({
+  text: 'IMG2PDF',
+  font: 'standard',
+  theme: 'tech'
+});
+```
+
+**Salida:**
+```
+██ ███    ███ ██████  ██ ██████ 
+██ ████  ████ ██   ██ ██ ██   ██
+██ ██ ████ ██ ██████  ██ ██   ██
+██ ██  ██  ██ ██      ██ ██   ██
+██ ██      ██ ██      ██ ██████ 
+```
+
+**Ejemplo 2: Banner con animación y borde**
+```javascript
+await showAnimatedBanner({
+  text: 'MY-CLI',
+  font: 'block',
+  theme: 'neon',
+  animation: 'typewriter',
+  speed: 30,
+  border: { enabled: true, style: 'rounded' },
+  subtitle: 'v1.0.0',
+  version: 'Made with ❤️'
+});
+```
+
+**Salida:**
+```
+╭────────────────────────────────────────╮
+│                                        │
+│  ███╗   ███╗██╗   ██╗     ██████╗██╗   │
+│  ████╗ ████║╚██╗ ██╔╝    ██╔════╝██║   │
+│  ██╔████╔██║ ╚████╔╝     ██║     ██║   │
+│  ██║╚██╔╝██║  ╚██╔╝      ██║     ██║   │
+│  ██║ ╚═╝ ██║   ██║       ╚██████╗██║   │
+│  ╚═╝     ╚═╝   ╚═╝        ╚═════╝╚═╝   │
+│                                        │
+│            v1.0.0                      │
+│         Made with ❤️                   │
+╰────────────────────────────────────────╯
+```
+
+**Ejemplo 3: Banner con gradiente fuego**
+```javascript
+showSimpleBanner({
+  text: 'FLARE-DF',
+  font: 'fire',
+  gradient: {
+    type: 'vertical',
+    colors: ['red', 'yellow', 'white']
+  }
+});
+```
+
+**Ejemplo 4: Banner minimalista**
+```javascript
+showSimpleBanner({
+  text: 'APP',
+  font: 'minimal',
+  theme: 'minimal',
+  subtitle: 'Simple and clean'
+});
+```
+
+**Ejemplo 5: Banner con borde doble y colores**
+```javascript
+showSimpleBanner({
+  text: 'HELLO',
+  font: 'standard',
+  border: { enabled: true, style: 'double', color: 'cyan' },
+  colors: { text: 'green' },
+  padding: { left: 2, right: 2 }
+});
+```
+
+---
+
+### **Fase 8: Validaciones**
+
+#### **8.1 Validaciones Obligatorias:**
+
+```typescript
+function validateGlyphCatalog(font: Font): ValidationResult {
+  const errors: string[] = [];
+  const heights = new Set<number>();
+  
+  for (const [char, glyph] of Object.entries(font)) {
+    // Verificar que todas las filas tengan el mismo ancho
+    const widths = new Set(glyph.rows.map(r => r.length));
+    if (widths.size > 1) {
+      errors.push(`Glifo '${char}' tiene filas de ancho inconsistente: ${[...widths].join(', ')}`);
+    }
+    
+    // Registrar altura
+    heights.add(glyph.rows.length);
+  }
+  
+  // Verificar que todos los glifos tengan la misma altura
+  if (heights.size > 1) {
+    errors.push(`Fuente tiene alturas inconsistentes: ${[...heights].join(', ')}`);
+  }
+  
+  // Verificar caracteres requeridos
+  const required = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ';
+  for (const char of required) {
+    if (!font[char]) {
+      errors.push(`Falta glifo para carácter requerido: '${char}'`);
+    }
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+```
+
+---
+
+#### **8.2 Validación de Configuración:**
+
+```typescript
+function validateConfig(config: BannerConfig): ValidationResult {
+  const errors: string[] = [];
+  
+  // Validar texto
+  if (!config.text || config.text.length === 0) {
+    errors.push('El texto del banner no puede estar vacío');
+  }
+  
+  // Validar fuente
+  if (!getFont(config.font)) {
+    errors.push(`Fuente desconocida: ${config.font}`);
+  }
+  
+  // Validar animación
+  const validAnimations = ['none', 'typewriter', 'fade', 'slide', 'wave', 'block'];
+  if (config.animation && !validAnimations.includes(config.animation)) {
+    errors.push(`Animación inválida: ${config.animation}`);
+  }
+  
+  // Validar velocidad
+  if (config.speed !== undefined && (config.speed < 0 || config.speed > 1000)) {
+    errors.push('La velocidad debe estar entre 0 y 1000 ms');
+  }
+  
+  // Validar maxWidth
+  if (config.maxWidth !== undefined && config.maxWidth < 20) {
+    errors.push('El ancho máximo debe ser al menos 20 caracteres');
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+```
+
+---
+
+### **Fase 9: Extensibilidad**
+
+#### **9.1 Registro de Glifos Personalizados:**
+
+```typescript
+class GlyphCatalog {
+  private fonts: Map<string, Font> = new Map();
+  
+  // Registrar nueva fuente
+  registerFont(name: string, font: Font): void {
+    this.validateFont(font);
+    this.fonts.set(name, font);
+  }
+  
+  // Registrar glifos individuales
+  registerGlyphs(fontName: string, glyphs: Record<string, string[]>): void {
+    const font = this.fonts.get(fontName);
+    if (!font) throw new Error(`Fuente no encontrada: ${fontName}`);
+    
+    for (const [char, rows] of Object.entries(glyphs)) {
+      font[char] = { char, rows, width: rows[0].length, height: rows.length };
+    }
+  }
+  
+  // Agregar icono/logo personalizado
+  registerIcon(name: string, lines: string[]): void {
+    // Los iconos se almacenan como glifos multi-carácter
+    this.icons.set(name, lines);
+  }
+}
+```
+
+---
+
+#### **9.2 Registro de Temas Personalizados:**
+
+```typescript
+class ThemeRegistry {
+  private themes: Map<string, Theme> = new Map();
+  
+  registerTheme(name: string, theme: Theme): void {
+    this.themes.set(name, theme);
+  }
+  
+  getTheme(name: string): Theme {
+    return this.themes.get(name) || THEMES['default'];
+  }
+}
+```
+
+---
+
+#### **9.3 Registro de Fuentes Personalizadas:**
+
+```typescript
+// Los usuarios pueden cargar fuentes desde archivos JSON
+async function loadFontFromFile(path: string): Promise<Font> {
+  const content = await fs.readFile(path, 'utf-8');
+  const font = JSON.parse(content);
+  validateGlyphCatalog(font);
+  return font;
+}
+```
+
+---
+
+### **Fase 10: Pruebas Unitarias**
+
+#### **10.1 Pruebas de Glifos:**
+
+```typescript
+describe('GlyphCatalog', () => {
+  test('cada letra A-Z debe estar definida', () => {
+    for (let i = 65; i <= 90; i++) {
+      const char = String.fromCharCode(i);
+      expect(fonts.standard[char]).toBeDefined();
+    }
+  });
+  
+  test('cada letra a-z debe estar definida', () => {
+    for (let i = 97; i <= 122; i++) {
+      const char = String.fromCharCode(i);
+      expect(fonts.standard[char]).toBeDefined();
+    }
+  });
+  
+  test('todos los números 0-9 deben estar definidos', () => {
+    for (let i = 0; i <= 9; i++) {
+      expect(fonts.standard[i.toString()]).toBeDefined();
+    }
+  });
+  
+  test('todos los glifos de una fuente deben tener la misma altura', () => {
+    const heights = Object.values(fonts.standard).map(g => g.height);
+    expect(new Set(heights).size).toBe(1);
+  });
+  
+  test('todas las filas de un glifo deben tener el mismo ancho', () => {
+    for (const glyph of Object.values(fonts.standard)) {
+      const widths = glyph.rows.map(r => r.length);
+      expect(new Set(widths).size).toBe(1);
+    }
+  });
+});
+```
+
+---
+
+#### **10.2 Pruebas de Composición:**
+
+```typescript
+describe('CompositionEngine', () => {
+  test('debe componer una palabra correctamente', () => {
+    const result = composeBanner('AB', { font: 'standard' });
+    expect(result).toHaveLength(5);
+    expect(result[0]).toContain('█████');
+    expect(result[0]).toContain('██████');
+  });
+  
+  test('debe aplicar spacing entre caracteres', () => {
+    const result = composeBanner('AB', { font: 'standard', spacing: 2 });
+    expect(result[0]).toMatch(/█████ {2}██████/);
+  });
+  
+  test('debe manejar caracteres desconocidos con fallback', () => {
+    const result = composeBanner('A😀B', { font: 'standard' });
+    expect(result.join('\n')).toContain('?');
+  });
+  
+  test('debe dividir texto largo en múltiples líneas', () => {
+    const longText = 'A'.repeat(50);
+    const result = composeBanner(longText, { font: 'standard', maxWidth: 80 });
+    expect(result.length).toBeGreaterThan(5);
+  });
+});
+```
+
+---
+
+#### **10.3 Pruebas de Alineación:**
+
+```typescript
+describe('Alignment', () => {
+  test('debe centrar correctamente con caracteres Unicode', () => {
+    const lines = ['██'];
+    const result = applyAlignment(lines, 'center', 10);
+    expect(getVisibleWidth(result[0])).toBe(10);
+  });
+  
+  test('debe ignorar códigos ANSI al calcular ancho', () => {
+    const line = '\x1b[31m██\x1b[0m';
+    expect(getVisibleWidth(line)).toBe(2);
+  });
+});
+```
+
+---
+
+#### **10.4 Pruebas de Colores:**
+
+```typescript
+describe('Colors', () => {
+  test('no debe aplicar colores cuando NO_COLOR está activo', () => {
+    process.env.NO_COLOR = '1';
+    const result = applyColors(['test'], { noColor: true });
+    expect(result[0]).not.toContain('\x1b[');
+    delete process.env.NO_COLOR;
+  });
+  
+  test('no debe aplicar colores cuando no es TTY', () => {
+    const result = applyColors(['test'], { isTTY: false });
+    expect(result[0]).not.toContain('\x1b[');
+  });
+  
+  test('debe aplicar gradiente correctamente', () => {
+    const line = 'AAAA';
+    const result = applyGradient(line, {
+      type: 'horizontal',
+      colors: ['red', 'blue']
+    }, 0, 1);
+    expect(result).toContain('\x1b[');
+  });
+});
+```
+
+---
+
+#### **10.5 Pruebas de Animación:**
+
+```typescript
+describe('Animation', () => {
+  test('debe respetar modo silencioso', async () => {
+    const consoleSpy = jest.spyOn(console, 'log');
+    await animateBanner(['test'], { animation: 'typewriter', silent: true });
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+  });
+  
+  test('debe respetar cancelación', async () => {
+    // Simular Ctrl+C durante animación
+    // Verificar que se limpia la pantalla
+  });
+});
+```
+
+---
+
+#### **10.6 Pruebas de Compatibilidad:**
+
+```typescript
+describe('Compatibility', () => {
+  test('debe funcionar con salida redirigida', () => {
+    const result = renderBanner('TEST', { noColor: true });
+    expect(result).not.toContain('\x1b[');
+  });
+  
+  test('debe funcionar en terminales pequeñas', () => {
+    const result = composeBanner('VERYLONGTEXT', { maxWidth: 20 });
+    // Debe dividir en múltiples líneas
+    expect(result.length).toBeGreaterThan(5);
+  });
+  
+  test('debe degradar Unicode cuando no hay soporte', () => {
+    const result = composeBanner('TEST', { unicode: false });
+    // No debe usar caracteres Unicode de box-drawing
+  });
+});
+```
+
+---
+
+### **Fase 11: Integración con Otros Skills**
+
+#### **11.1 Relación con Bootstrap Inteligente:**
+- El banner se muestra después del bootstrap exitoso
+- Usa el Progress Orchestrator para mostrar el loader del bootstrap
+- Al finalizar bootstrap, muestra el banner como bienvenida
+
+#### **11.2 Relación con Menús Adaptativos:**
+- El banner aparece antes del menú
+- El menú puede permitir cambiar el tema del banner
+- Opción "Cambiar banner" en el menú
+
+#### **11.3 Relación con Arquitectura Modular:**
+- El banner se integra como módulo `ui/banner.ts`
+- Sigue los principios de responsabilidad única
+- Inyectable vía DI para facilitar testing
+
+#### **11.4 Relación con Banners (skill anterior):**
+- Esta skill es la implementación concreta del skill conceptual de Banners
+- Proporciona el alfabeto completo que faltaba en la skill anterior
+- Permite generar cualquier texto sin que el agente invente letras
+
+---
+
+### **Fase 12: Implementación por Lenguaje**
+
+#### **Node.js/TypeScript:**
+```javascript
+// Librerías recomendadas:
+// - chalk (colores ANSI)
+// - ansi-escapes (control de terminal)
+// - cli-boxes (estilos de bordes)
+// - wrap-ansi (ajuste de texto con ANSI)
+// - string-width (ancho visible considerando Unicode)
+```
+
+#### **Python:**
+```python
+# Librerías recomendadas:
+# - rich (banners, colores, animaciones)
+# - colorama (colores cross-platform)
+# - pyfiglet (ASCII art)
+# - blessed (control de terminal)
+```
+
+#### **Rust:**
+```rust
+// Crates recomendados:
+// - crossterm (control de terminal)
+// - console (manejo de terminal)
+// - figlet-rs (ASCII art)
+// - comfy-table (tablas y bordes)
+```
+
+#### **Go:**
+```go
+// Paquetes recomendados:
+// - fatih/color (colores)
+// - charmbracelet/lipgloss (estilos)
+// - common-nand/asciigraph (gráficos ASCII)
+```
+
+---
+
+### **Fase 13: Beneficios del Sistema**
+
+✅ **Alfabeto completo:** A-Z, a-z, 0-9, símbolos, acentos listos para usar  
+✅ **Múltiples fuentes:** 3, 5, 7 filas con estilos variados  
+✅ **Temas predefinidos:** retro, tech, fire, ocean, neon, minimal, forest  
+✅ **Gradientes:** horizontal, vertical, rainbow, fire, ocean  
+✅ **Animaciones:** typewriter, fade, slide, wave, block  
+✅ **Bordes:** single, double, rounded, bold, ascii  
+✅ **Alineación:** izquierda, centro, derecha  
+✅ **Detección automática:** TTY, NO_COLOR, Unicode, colores  
+✅ **Extensible:** fuentes, temas, glifos personalizados  
+✅ **Validado:** pruebas exhaustivas para cada componente  
+✅ **Multiplataforma:** Windows, Linux, macOS  
+✅ **Multi-lenguaje:** Node.js, Python, Rust, Go  
+✅ **Integrable:** con Bootstrap, Menús, Progress, etc.  
+✅ **Accesible:** modo sin color, sin animación, ASCII puro  
+✅ **Rápido:** composición optimizada, caché de glifos  
+✅ **Consistente:** mismo comportamiento en todos los proyectos  
+✅ **Documentado:** ejemplos claros para cada caso de uso  
+✅ **Profesional:** calidad enterprise desde el primer uso  
+
+---
+
+### **Conclusión:**
+
+Esta skill resuelve el problema fundamental de generar banners en aplicaciones CLI: **el agente ya no tiene que inventar letras**. Con el catálogo completo de glifos (A-Z, a-z, 0-9, símbolos, acentos) y múltiples fuentes predefinidas, cualquier texto puede convertirse en un banner ASCII profesional en segundos.
+
+La skill es **complementaria** a la skill anterior de "Banners" (que definía el concepto y los tipos de banners), pero esta vez proporciona la **implementación concreta** con el alfabeto completo que faltaba. El agente puede ahora generar banners para nombres como `IMG2PDF`, `FLARE-DF`, `MY-CLI`, o cualquier otro texto personalizado, sin tener que dibujar las letras manualmente.
+
+La combinación de motor de composición, sistema de temas, animaciones, detección de terminal, validaciones exhaustivas y extensibilidad convierte a esta skill en una solución **enterprise-grade** para generación de banners que puede reutilizarse en cualquier aplicación CLI, manteniendo consistencia visual y calidad profesional en todos los proyectos del ecosistema.

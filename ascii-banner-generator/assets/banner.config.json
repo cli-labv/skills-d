@@ -1,0 +1,57 @@
+{
+  "version": "1.0.0",
+  "fonts": ["standard", "block", "slim", "retro", "tech", "minimal", "shadow", "fire"],
+  "fontHeights": [3, 5, 7],
+  "themes": {
+    "default": {
+      "colors": { "text": "white", "subtitle": "gray", "border": "cyan" }
+    },
+    "retro": {
+      "colors": { "text": "yellow", "subtitle": "magenta", "border": "green" },
+      "font": "retro"
+    },
+    "tech": {
+      "colors": { "text": "cyan", "subtitle": "blue", "border": "white" },
+      "font": "tech"
+    },
+    "fire": {
+      "gradient": { "type": "vertical", "colors": ["red", "yellow", "white"] },
+      "font": "fire"
+    },
+    "ocean": {
+      "gradient": { "type": "horizontal", "colors": ["blue", "cyan", "white"] }
+    },
+    "neon": {
+      "colors": { "text": "magenta", "subtitle": "cyan", "border": "yellow" }
+    },
+    "minimal": {
+      "colors": { "text": "white" },
+      "border": { "enabled": false },
+      "font": "minimal"
+    },
+    "forest": {
+      "colors": { "text": "green", "subtitle": "yellow", "border": "green" }
+    }
+  },
+  "animations": ["none", "typewriter", "fade", "slide", "wave", "block"],
+  "defaultAnimation": "none",
+  "defaultSpeed": 50,
+  "defaultSpacing": 1,
+  "defaultAlignment": "center",
+  "defaultMaxWidth": 80,
+  "borderStyles": ["single", "double", "rounded", "bold", "ascii"],
+  "glyphCatalog": {
+    "uppercase": "A-Z",
+    "lowercase": "a-z",
+    "numbers": "0-9",
+    "accents": ["Á", "É", "Í", "Ó", "Ú", "Ü", "Ñ", "á", "é", "í", "ó", "ú", "ü", "ñ"],
+    "symbols": ["-", "_", ".", ":", "/", "\\", "(", ")", "[", "]", "!", "?", "+", "=", "*", "@", "#", "&", "%", "$", "|", ",", ";", "<", ">"]
+  },
+  "fallbackGlyph": "?",
+  "terminalDetection": {
+    "tty": true,
+    "noColor": true,
+    "unicode": true,
+    "colorSupport": ["none", "basic", "256", "truecolor"]
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "version": "1.0.0",
+  "app": {
+    "name": { "type": "string", "required": true },
+    "version": { "type": "string", "required": true },
+    "environment": { "type": "enum", "values": ["development", "production", "test"], "default": "development" }
+  },
+  "scanner": {
+    "maxDepth": { "type": "number", "min": 0, "default": null },
+    "followSymlinks": { "type": "boolean", "default": false },
+    "excludePatterns": { "type": "array", "items": "string", "default": [] }
+  },
+  "processing": {
+    "maxWorkers": { "type": "number", "min": 1, "default": "auto" },
+    "batchSize": { "type": "number", "min": 1, "default": 100 },
+    "timeout": { "type": "number", "min": 0, "default": 30000 }
+  },
+  "memory": {
+    "maxMemoryMB": { "type": "number", "min": 64, "default": 2048 },
+    "strategy": { "type": "enum", "values": ["auto", "full-load", "streaming", "chunked"], "default": "auto" }
+  },
+  "cache": {
+    "enabled": { "type": "boolean", "default": true },
+    "location": { "type": "string", "default": ".cache/app.json" },
+    "ttl": { "type": "number", "min": 0, "default": 86400 }
+  },
+  "ui": {
+    "theme": { "type": "enum", "values": ["light", "dark", "auto"], "default": "auto" },
+    "language": { "type": "string", "default": "auto" },
+    "showBanner": { "type": "boolean", "default": true },
+    "bannerStyle": { "type": "string", "default": "auto" }
+  },
+  "logging": {
+    "level": { "type": "enum", "values": ["debug", "info", "warn", "error"], "default": "info" },
+    "file": { "type": "string", "default": null }
+  }
+}

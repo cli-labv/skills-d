@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0",
+  "concurrency": {
+    "maxWorkers": "auto",
+    "workerType": "auto",
+    "batchSize": 1,
+    "preserveOrder": true,
+    "queueSize": 1000
+  },
+  "retry": {
+    "enabled": true,
+    "maxAttempts": 3,
+    "strategy": "exponential",
+    "initialDelay": 100,
+    "maxDelay": 5000,
+    "jitter": true,
+    "retryableErrors": ["EAGAIN", "ETIMEDOUT", "network", "rate_limit"]
+  },
+  "errorHandling": {
+    "strategy": "continue",
+    "maxErrors": null,
+    "onError": "collect",
+    "failFast": false
+  },
+  "cancellation": {
+    "enabled": true,
+    "gracefulShutdown": true,
+    "timeout": 5000,
+    "onCancel": "complete_current"
+  },
+  "memory": {
+    "maxMemoryMB": null,
+    "backpressure": true,
+    "gcThreshold": 0.8,
+    "streamResults": false
+  },
+  "progress": {
+    "enabled": true,
+    "updateInterval": 100,
+    "showIndividual": false,
+    "style": "auto"
+  },
+  "metrics": {
+    "enabled": true,
+    "compareSequential": false,
+    "exportFormat": "json",
+    "exportPath": null
+  },
+  "debug": {
+    "sequentialMode": false,
+    "deterministicOrder": false,
+    "logLevel": "warn"
+  }
+}

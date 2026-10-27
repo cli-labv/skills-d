@@ -1,0 +1,18 @@
+{
+  "type": "box-drawing",
+  "title": "My App CLI",
+  "subtitle": "Universal Banner System",
+  "version": "1.0.0",
+  "showInfo": true,
+  "info": {
+    "author": "Your Name",
+    "license": "MIT"
+  },
+  "colors": {
+    "primary": "#00ff00",
+    "secondary": "#0088ff",
+    "background": "transparent"
+  },
+  "animation": false,
+  "border": "rounded"
+}

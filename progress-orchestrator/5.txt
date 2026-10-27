@@ -1,0 +1,548 @@
+## Skill: Progress Orchestrator Universal - Sistema Inteligente de Indicadores de Progreso para CLI
+
+**Descripción General:**
+Implementar un sistema universal, reutilizable y dinámico de indicadores de progreso para aplicaciones CLI que gestione el ciclo de vida completo de cualquier operación —inicio, selección del indicador, actualización, finalización, error y cancelación— mediante una interfaz común capaz de mostrar una barra determinista o un spinner animado según el tipo, tamaño y fase del trabajo. Este sistema debe ser una capa independiente de experiencia de usuario que pueda reutilizarse en conversores, instaladores, analizadores, migraciones, descargas o cualquier aplicación que procese colecciones de archivos o tareas.
+
+---
+
+### **Fase 1: Arquitectura del Progress Orchestrator**
+
+#### **1.1 Componentes Principales:**
+
+**ProgressOrchestrator (Coordinador Principal):**
+- Recibe una operación, su cantidad total, la unidad de trabajo, la fase actual y las preferencias visuales
+- Selecciona automáticamente el indicador adecuado según el contexto
+- Mantiene un historial de estilos usados para evitar repetición
+- Coordina múltiples indicadores concurrentes si es necesario
+- Expone métodos públicos: `start`, `set_phase`, `update`, `set_message`, `finish`, `fail`, `cancel`
+
+**ProgressStyleManager (Gestor de Estilos):**
+- Mantiene catálogo completo de estilos de barras y spinners
+- Gestiona historial persistente de estilos usados (entre ejecuciones)
+- Implementa lógica de selección (aleatoria, secuencial, contextual)
+- Permite inyección de generador aleatorio con semilla configurable para testing
+- Evita repetir los últimos N indicadores usados (configurable)
+
+**ProgressRenderer (Renderizador):**
+- Renderiza el indicador en terminal según el tipo seleccionado
+- Maneja actualizaciones eficientes (evita parpadeos)
+- Detecta capacidades de la terminal (TTY, CI, soporte Unicode, colores)
+- Implementa degradación elegante a texto simple cuando no hay soporte
+- Aplica límites de frecuencia para no saturar la terminal
+
+**ProgressCalculator (Calculador):**
+- Calcula ETA (tiempo estimado de finalización)
+- Calcula velocidad de procesamiento (elementos/segundo, MB/segundo)
+- Cuenta éxitos, fallos y porcentaje completado
+- Maneja operaciones con fases múltiples
+
+---
+
+### **Fase 2: Catálogo de Estilos de Indicadores**
+
+#### **2.1 Estilos de Barras de Progreso:**
+
+**Barra Clásica:**
+```
+[████████████████████░░░░░░░░░░░░░░░░] 50% (150/300)
+```
+
+**Barra Moderna con Gradiente:**
+```
+Progress: ████████████████░░░░░░░░░░░░░░░░ 50% | 150/300 | ETA: 2m 30s
+```
+
+**Barra con Flechas:**
+```
+[==============>                 ] 50% (150/300)
+```
+
+**Barra Unicode:**
+```
+▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 50%
+```
+
+**Barra Minimalista:**
+```
+50% [150/300] ████████░░░░░░░░
+```
+
+**Barra Decorativa:**
+```
+╔══════════════════════════════════╗
+║ ████████████████░░░░░░░░░░░░░░░░ ║
+║ 50% | 150/300 | ⚡ 150 items/s   ║
+╚══════════════════════════════════╝
+```
+
+**Barra con Información Extendida:**
+```
+Procesando imágenes: ████████████████░░░░░░░░░░░░░░░░ 50%
+  ├─ Total: 300 imágenes
+  ├─ Completadas: 150 (148 ✓, 2 ✗)
+  ├─ Velocidad: 15.3 img/s
+  ├─ ETA: 1m 42s
+  └─ Fase: Convirtiendo a PNG
+```
+
+---
+
+#### **2.2 Estilos de Spinners:**
+
+**Spinner de Puntos:**
+```
+Procesando... ⠋
+Procesando... ⠙
+Procesando... ⠹
+Procesando... ⠸
+```
+
+**Spinner de Líneas:**
+```
+Cargando... |
+Cargando... /
+Cargando... -
+Cargando... \
+```
+
+**Spinner de Reloj:**
+```
+Escaneando... 🕐
+Escaneando... 🕑
+Escaneando... 🕒
+Escaneando... 🕓
+```
+
+**Spinner de Luna:**
+```
+Sincronizando... 🌑
+Sincronizando... 🌒
+Sincronizando... 🌓
+Sincronizando... 🌔
+```
+
+**Spinner de Flecha:**
+```
+Buscando... ←
+Buscando... ↑
+Buscando... →
+Buscando... ↓
+```
+
+**Spinner de Rebote:**
+```
+Conectando... [●    ]
+Conectando... [ ●   ]
+Conectando... [  ●  ]
+Conectando... [   ● ]
+```
+
+**Spinner de Estrella:**
+```
+Optimizando... ✦
+Optimizando... ✧
+Optimizando... ✦
+Optimizando... ✧
+```
+
+**Spinner de Onda:**
+```
+Analizando... ▁▂▃▄▅▆▇█▇▆▅▄▃▂▁
+```
+
+**Spinner Minimalista:**
+```
+Trabajando... ·
+Trabajando... o
+Trabajando... O
+Trabajando... o
+```
+
+---
+
+### **Fase 3: Lógica de Selección Inteligente**
+
+#### **3.1 Criterios de Selección Automática:**
+
+**Por Tamaño de la Operación:**
+- **Tareas pequeñas (≤10 elementos):** Spinner (no vale la pena mostrar barra)
+- **Tareas medianas (11-100 elementos):** Barra simple
+- **Tareas grandes (>100 elementos):** Barra con información extendida
+- **Tareas muy grandes (>1000 elementos):** Barra con ETA y velocidad
+
+**Por Tipo de Operación:**
+- **Operaciones con duración desconocida:** Spinner (escaneo, búsqueda)
+- **Operaciones con duración conocida:** Barra de progreso
+- **Operaciones en paralelo:** MultiProgress con múltiples barras
+- **Operaciones con fases:** Barra con indicador de fase actual
+
+**Por Contexto:**
+- **Terminal interactiva (TTY):** Indicador completo con colores y animación
+- **CI/CD o pipes:** Texto simple sin animación
+- **Sin soporte Unicode:** Degradación a caracteres ASCII básicos
+- **Sin soporte de colores:** Monocromático con símbolos
+
+**Por Preferencias del Usuario:**
+- **Modo silencioso:** Sin indicador visual, solo logs
+- **Estilo preferido:** Usuario puede forzar un estilo específico
+- **Aleatoriedad:** Seleccionar estilo aleatorio (con memoria para no repetir)
+- **Accesibilidad:** Evitar emojis si el usuario lo configura
+
+---
+
+#### **3.2 Sistema de Memoria de Estilos:**
+
+**Persistencia entre Ejecuciones:**
+- Guardar historial de últimos N estilos usados en archivo de configuración
+- Al iniciar, cargar historial y evitar repetir esos estilos
+- Configurable: cuántos estilos recordar (por defecto: 4)
+
+**Inyección de Generador Aleatorio:**
+- Permitir inyectar generador aleatorio personalizado
+- Soporte para semilla fija (útil para testing)
+- Por defecto: generador aleatorio del sistema
+
+**Ejemplo de Configuración:**
+```json
+{
+  "progress": {
+    "style_selection": "random",
+    "memory_size": 4,
+    "persist_memory": true,
+    "random_seed": null,
+    "preferred_styles": {
+      "small_tasks": ["spinner-dots", "spinner-lines"],
+      "large_tasks": ["bar-modern", "bar-extended"],
+      "unknown_duration": ["spinner-moon", "spinner-wave"]
+    }
+  }
+}
+```
+
+---
+
+### **Fase 4: Gestión del Ciclo de Vida Completo**
+
+#### **4.1 Estados del Indicador:**
+
+**Inicialización (`start`):**
+- Recibe: operación, total, unidad, fase inicial
+- Selecciona estilo según criterios
+- Inicializa contador y tiempo de inicio
+- Muestra indicador por primera vez
+
+**Actualización (`update`):**
+- Recibe: incremento (cuántos elementos se procesaron)
+- Recalcula porcentaje, velocidad, ETA
+- Actualiza pantalla (con límite de frecuencia)
+- Maneja casos edge (overflow, final anticipado)
+
+**Cambio de Fase (`set_phase`):**
+- Recibe: nombre de la nueva fase
+- Actualiza mensaje mostrado
+- Opcionalmente: reinicia contador si la fase es independiente
+- Mantiene el mismo estilo de indicador
+
+**Mensaje Personalizado (`set_message`):**
+- Recibe: texto personalizado
+- Se muestra junto al indicador
+- Útil para contexto adicional
+
+**Finalización Exitosa (`finish`):**
+- Muestra indicador al 100%
+- Muestra mensaje de éxito con resumen
+- Opcionalmente: muestra estadísticas finales (tiempo total, velocidad promedio)
+- Limpia recursos
+
+**Finalización con Error (`fail`):**
+- Muestra indicador en estado de error
+- Muestra mensaje de error claro
+- Opcionalmente: muestra qué se completó antes del error
+- Limpia recursos
+
+**Cancelación (`cancel`):**
+- Detecta Ctrl+C o cancelación programática
+- Muestra mensaje de cancelación
+- Muestra progreso alcanzado antes de cancelar
+- Limpia recursos y estado
+
+---
+
+#### **4.2 Soporte para Concurrencia:**
+
+**MultiProgress (Múltiples Indicadores Simultáneos):**
+- Coordina múltiples barras/spinners en paralelo
+- Mantiene orden visual estable (no parpadeos)
+- Actualiza pantalla una vez por ciclo, no por cada elemento
+- Soporta progreso global + progreso por tarea individual
+
+**Ejemplo de Uso:**
+```
+Procesando carpetas: ████████████████░░░░░░░░░░░░░░░░ 50% (5/10)
+  ├─ Carpeta 1: ████████████████████ 100% ✓
+  ├─ Carpeta 2: ████████████████████ 100% ✓
+  ├─ Carpeta 3: ██████████░░░░░░░░░░ 50% (procesando...)
+  ├─ Carpeta 4: ⠋ Escaneando archivos...
+  └─ Carpeta 5: Esperando...
+```
+
+**Separación de Niveles de Progreso:**
+- **Progreso global:** Avance total de la operación completa
+- **Progreso por tarea:** Avance de cada subtarea individual
+- **Progreso por elemento:** Avance dentro de un elemento específico (si aplica)
+
+---
+
+### **Fase 5: Características Avanzadas**
+
+#### **5.1 Cálculos Inteligentes:**
+
+**ETA (Tiempo Estimado de Finalización):**
+- Basado en velocidad promedio actual
+- Se actualiza dinámicamente
+- Formato inteligente: segundos, minutos, horas según duración
+- Maneja casos donde ETA es muy largo o muy corto
+
+**Velocidad de Procesamiento:**
+- Calcula elementos/segundo, MB/segundo, etc.
+- Muestra velocidad instantánea y promedio
+- Útil para identificar cuellos de botella
+
+**Estadísticas de Éxito/Error:**
+- Cuenta elementos procesados exitosamente
+- Cuenta elementos fallidos
+- Muestra porcentaje de éxito
+- Opcionalmente: lista los elementos fallidos al final
+
+---
+
+#### **5.2 Detección de Entorno:**
+
+**Detección de TTY:**
+- Si es terminal interactiva: indicador completo con animación
+- Si es pipe o redirección: texto simple sin animación
+- Si es CI/CD (GitHub Actions, GitLab CI, etc.): modo simplificado
+
+**Detección de Soporte Unicode:**
+- Si soporta Unicode completo: usa caracteres Unicode (▰▱, █░, etc.)
+- Si solo soporta ASCII básico: degrada a caracteres ASCII (#[=], etc.)
+- Si no soporta emojis: evita emojis en indicadores
+
+**Detección de Soporte de Colores:**
+- Si soporta colores ANSI: usa colores para diferenciar estados
+- Si no soporta colores: monocromático con símbolos
+- Respeta variable de entorno `NO_COLOR`
+
+---
+
+#### **5.3 Accesibilidad y Configuración:**
+
+**Política de Accesibilidad:**
+- No depender exclusivamente de emojis o caracteres Unicode
+- Proporcionar alternativa en texto plano
+- Respetar preferencias del usuario (configuración de accesibilidad)
+- Evitar animaciones si el usuario lo configura (reduce carga visual)
+
+**Modo Silencioso:**
+- Sin indicador visual en pantalla
+- Solo logs en archivo o stdout
+- Útil para scripts automatizados o cuando se redirige output
+
+**Configuración de Idioma:**
+- Todos los mensajes traducibles
+- Soporte para múltiples idiomas (español, inglés, etc.)
+- Mensajes de fase, éxito, error, cancelación traducidos
+
+---
+
+### **Fase 6: Integración con Otros Skills**
+
+#### **6.1 Relación con el Bootstrap Inteligente:**
+
+- Durante el bootstrap, el Progress Orchestrator muestra el loader de inicialización
+- El loader del bootstrap es un caso especial del Progress Orchestrator
+- Mismos principios: mensajes contextuales, actualización eficiente, finalización limpia
+
+#### **6.2 Relación con el Menú Adaptativo:**
+
+- Después del menú, cuando el usuario selecciona una opción, el Progress Orchestrator muestra el progreso de esa operación
+- El menú puede mostrar indicadores de estado (ej: "5 sesiones activas") usando el mismo sistema
+
+#### **6.3 Relación con la Gestión de Directorios:**
+
+- Al crear directorios automáticamente, el Progress Orchestrator puede mostrar progreso si hay muchos directorios
+- Al procesar archivos de input/output, muestra progreso del procesamiento
+
+---
+
+### **Fase 7: Mejoras sobre Implementaciones Existentes**
+
+#### **7.1 Problemas Comunes a Evitar:**
+
+**Memoria de Estilos No Persistente:**
+- ❌ Mal: `ProgressStyleManager` se recrea en cada ejecución, olvida estilos usados
+- ✅ Bien: Persistir historial en archivo de configuración entre ejecuciones
+
+**Aleatoriedad No Controlable:**
+- ❌ Mal: Aleatoriedad pura dificulta testing y puede ser inconsistente
+- ✅ Bien: Permitir inyección de generador aleatorio con semilla configurable
+
+**Duplicación de Progreso:**
+- ❌ Mal: Actualizar progreso al cargar imágenes y luego al agregarlas como páginas PDF (duplica avance)
+- ✅ Bien: Separar claramente las fases y no contar dos veces el mismo trabajo
+
+**Indicador Incorrecto para Tareas Pequeñas:**
+- ❌ Mal: Seleccionar barra para tarea pequeña, luego recalcular como spinner (inconsistente)
+- ✅ Bien: Decidir estilo una vez al inicio y mantenerlo durante toda la operación
+
+**Fases Costosas Sin Progreso:**
+- ❌ Mal: Escaneo, validación de caché, cálculo de hashes, compresión, escritura, limpieza dejan interfaz detenida
+- ✅ Bien: Mostrar progreso o spinner en todas las fases costosas, no solo en las principales
+
+**Procesamiento Paralelo Falso:**
+- ❌ Mal: Declarar modo paralelo pero procesar secuencialmente
+- ✅ Bien: Implementar concurrencia real con MultiProgress que muestre múltiples indicadores
+
+---
+
+#### **7.2 Características que Toda Implementación Debe Tener:**
+
+✅ **Ciclo de vida completo:** start, update, set_phase, set_message, finish, fail, cancel  
+✅ **Selección inteligente:** Según tamaño, tipo, contexto y preferencias  
+✅ **Memoria persistente:** Recordar estilos usados entre ejecuciones  
+✅ **Aleatoriedad controlable:** Generador inyectable con semilla opcional  
+✅ **Concurrencia real:** MultiProgress para tareas paralelas  
+✅ **Cálculos avanzados:** ETA, velocidad, éxitos/errores  
+✅ **Detección de entorno:** TTY, CI, Unicode, colores  
+✅ **Degradación elegante:** Funciona en terminales limitadas  
+✅ **Accesibilidad:** No depender solo de emojis/Unicode  
+✅ **Configuración completa:** Idioma, modo silencioso, estilos preferidos  
+✅ **Sincronización segura:** Thread-safe si se usa desde múltiples hilos  
+✅ **Límites de frecuencia:** No actualizar terminal demasiado rápido  
+✅ **Cancelación limpia:** Manejar Ctrl+C correctamente  
+✅ **Estados finales diferenciados:** Éxito, error, cancelación con mensajes distintos  
+
+---
+
+### **Fase 8: Ejemplos de Uso en Diferentes Contextos**
+
+#### **Ejemplo 1: Conversor de Imágenes**
+
+```
+Procesando imágenes: ████████████████░░░░░░░░░░░░░░░░ 50% (150/300)
+  ├─ Total: 300 imágenes
+  ├─ Completadas: 150 (148 ✓, 2 ✗)
+  ├─ Velocidad: 15.3 img/s
+  ├─ ETA: 1m 42s
+  └─ Fase: Convirtiendo a PNG
+
+[Al finalizar]
+✅ Conversión completada
+  ├─ 298 imágenes convertidas exitosamente
+  ├─ 2 imágenes fallaron (ver log para detalles)
+  ├─ Tiempo total: 19m 36s
+  └─ Velocidad promedio: 15.3 img/s
+```
+
+#### **Ejemplo 2: Escaneo de Carpetas**
+
+```
+Escaneando sistema de archivos... ⠋
+  ├─ Carpetas escaneadas: 1,234
+  ├─ Archivos encontrados: 45,678
+  └─ Tamaño total: 12.3 GB
+```
+
+#### **Ejemplo 3: Descarga de Archivos**
+
+```
+Descargando archivos: ████████████████████ 100% (10/10)
+  ├─ archivo1.zip: ████████████████████ 100% ✓ (45.2 MB)
+  ├─ archivo2.zip: ████████████████████ 100% ✓ (32.1 MB)
+  ├─ archivo3.zip: ████████████████████ 100% ✓ (67.8 MB)
+  └─ ... (7 más)
+
+✅ Descarga completada
+  ├─ 10 archivos descargados
+  ├─ Tamaño total: 456.7 MB
+  └─ Tiempo total: 2m 15s
+```
+
+#### **Ejemplo 4: Operación con Error**
+
+```
+Procesando datos: ██████████░░░░░░░░░░ 50% (50/100)
+  ├─ Fase: Validando integridad
+  └─ Elemento actual: archivo_051.dat
+
+❌ Error en elemento 51
+  ├─ Archivo: archivo_051.dat
+  ├─ Error: Corrupción detectada en header
+  ├─ Progreso alcanzado: 50/100 (50%)
+  └─ Usa --continue-on-error para ignorar errores y continuar
+```
+
+#### **Ejemplo 5: Cancelación por Usuario**
+
+```
+Procesando archivos: ██████████░░░░░░░░░░ 50% (500/1000)
+^C
+⚠️ Operación cancelada por el usuario
+  ├─ Progreso alcanzado: 500/1000 (50%)
+  ├─ Tiempo transcurrido: 5m 23s
+  └─ Archivos procesados guardados en: /tmp/partial_output/
+```
+
+---
+
+### **Fase 9: Implementación por Lenguaje**
+
+#### **Node.js:**
+- `ora` - Spinners elegantes
+- `cli-progress` - Barras de progreso
+- `multibar` - Múltiples barras simultáneas
+- `progress` - Barra de progreso clásica
+
+#### **Python:**
+- `tqdm` - Barras de progreso muy populares
+- `rich.progress` - Barras y spinners con Rich
+- `alive-progress` - Barras animadas modernas
+- `halo` - Spinners elegantes
+
+#### **Rust:**
+- `indicatif` - Barras y spinners (muy popular)
+- `dialoguer` - Indicadores interactivos
+- `console` - Control de terminal (base para indicatif)
+
+#### **Go:**
+- `progressbar` - Barras de progreso
+- `spinner` - Spinners simples
+- `uiprogress` - Barras múltiples
+
+#### **Bash/Shell:**
+- `pv` - Pipe viewer (para pipes)
+- Spinners manuales con caracteres ASCII
+- Barras simples con caracteres de bloque
+
+---
+
+### **Fase 10: Beneficios del Sistema**
+
+✅ **Universal:** Aplica a cualquier tipo de operación en cualquier aplicación CLI  
+✅ **Reutilizable:** Una vez implementado, se usa en toda la app sin repetir código  
+✅ **Inteligente:** Selecciona automáticamente el indicador más adecuado  
+✅ **Persistente:** Recuerda preferencias y estilos usados entre ejecuciones  
+✅ **Configurable:** Cada aspecto puede personalizarse según necesidades  
+✅ **Robusto:** Maneja errores, cancelaciones y casos edge correctamente  
+✅ **Concurrente:** Soporta múltiples indicadores en paralelo sin parpadeos  
+✅ **Accesible:** Funciona en terminales limitadas y respeta preferencias de accesibilidad  
+✅ **Profesional:** Indicadores de calidad empresarial con cálculos avanzados  
+✅ **Eficiente:** Límites de frecuencia para no saturar la terminal  
+✅ **Traducible:** Soporte multi-idioma para mensajes  
+✅ **Integrable:** Trabaja en conjunto con Bootstrap, Menús y Gestión de Directorios  
+
+---
+
+### **Conclusión:**
+
+Esta skill transforma la gestión de indicadores de progreso de una colección de barras aleatorias a una capa independiente y profesional de experiencia de usuario. El Progress Orchestrator Universal puede reutilizarse en cualquier aplicación CLI que necesite mostrar progreso, manteniendo la misma lógica funcional aunque cambien las operaciones internas. Se integra perfectamente con los otros skills (Bootstrap, Menús Adaptativos, Gestión de Directorios) para crear aplicaciones CLI completas, profesionales y con excelente experiencia de usuario.

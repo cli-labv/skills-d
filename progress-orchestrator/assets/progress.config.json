@@ -1,0 +1,20 @@
+{
+  "progress": {
+    "style_selection": "auto",
+    "memory_size": 4,
+    "persist_memory": true,
+    "random_seed": null,
+    "preferred_styles": {
+      "small_tasks": ["spinner-dots", "spinner-lines"],
+      "medium_tasks": ["bar-simple"],
+      "large_tasks": ["bar-modern", "bar-extended"],
+      "unknown_duration": ["spinner-moon", "spinner-wave"]
+    },
+    "accessibility": {
+      "avoid_emojis": false,
+      "avoid_animations": false,
+      "silent_mode": false
+    },
+    "language": "en"
+  }
+}

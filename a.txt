@@ -1,0 +1,92 @@
+La mejor estructura de una skill (según las prácticas oficiales de skill-creator)Una skill es un paquete modular de instrucciones que especializa al agente en tareas, dominios o flujos de trabajo específicos. No se crea para cosas que el modelo ya sabe (ej. “cómo escribir un for loop”). Solo se codifica conocimiento no obvio, procedimental, de dominio o de organización.Estructura de directorio óptima (reutilizable en cualquier lenguaje)textnombre-de-la-skill/
+├── SKILL.md                 # Obligatorio: frontmatter + instrucciones
+├── scripts/                 # Opcional: código ejecutable reutilizable
+├── references/              # Opcional: documentación detallada (se carga bajo demanda)
+└── assets/                  # Opcional: plantillas, boilerplate, imágenes, fuentesPrincipios clave de diseño (best practices):
+Progressive Disclosure (carga progresiva):
+Nivel 1: solo name + description (siempre visibles, ~100 tokens).
+Nivel 2: cuerpo de SKILL.md (se carga solo cuando se activa, ideal < 5k tokens / < 500 líneas).
+Nivel 3: recursos en scripts/, references/ y assets/ (se leen solo cuando hacen falta).
+
+SKILL.md debe ser conciso. Todo lo que el modelo ya sabe no va. Cada párrafo debe justificar su costo en tokens.
+Descripción = único disparador. Toda la información de cuándo usar la skill va en el frontmatter description. Nunca en el cuerpo.
+Reutilizable entre lenguajes:
+Usa nombres genéricos (python-best-practices, api-design, testing-strategy).
+Pon ejemplos de varios lenguajes en references/ o en el cuerpo.
+Los scripts/ pueden ser multi-lenguaje o detectores de lenguaje.
+
+Ubicación correcta:
+Siempre crea skills nuevas en /home/workdir/.grok/skills/<nombre>/ (se persisten).
+Las skills de /root/.grok/skills/ son las bundled (no se guardan cambios).
+
+Plantilla vacía lista para copiar (con indicaciones)Crea la carpeta y el archivo así:Bash# Desde el sandbox o tu entorno
+bash /root/.grok/skills/skill-creator/scripts/init-skill.sh nombre-de-la-skill /home/workdir/.grok/skills --resources scripts,references,assetsLuego edita el SKILL.md con esta plantilla:Markdown---
+name: nombre-de-la-skill
+description: Qué hace esta skill y CUÁNDO usarla. Incluye palabras clave y escenarios de activación. Ejemplo: "Usa esta skill cuando el usuario pida crear, revisar o mejorar código en cualquier lenguaje, o mencione 'estructura de proyecto', 'clean architecture', 'mejores prácticas de programación', 'refactorizar', 'diseño de API', etc."
+---
+
+# Nombre de la Skill (título legible)
+
+Instrucciones claras y en forma imperativa. El agente las sigue cuando la skill se activa.
+
+## Cuándo y cómo usarla
+- Lista de escenarios concretos.
+- Qué debe hacer el agente primero (ej. "Pregunta el lenguaje y el tipo de proyecto si no está claro").
+
+## Flujo de trabajo principal
+1. Paso 1…
+2. Paso 2…
+3. …
+
+## Reglas y mejores prácticas
+- Regla 1 (concisa).
+- Regla 2…
+- Anti-patrones a evitar.
+
+## Recursos disponibles
+- Usa `scripts/nombre-script.py` (o .sh, .js, etc.) cuando necesites ejecutar código determinista.
+- Consulta `references/tema.md` para detalles de arquitectura, patrones o ejemplos multi-lenguaje.
+- Copia o adapta plantillas desde `assets/` cuando generes archivos.
+
+## Ejemplos de uso (muy cortos)
+- Usuario dice: "…" → Respuesta esperada / acciones.Campos y reglas estrictas del frontmatterYAML---
+name: kebab-case-solo-letras-numeros-y-guiones   # debe coincidir exactamente con el nombre de la carpeta
+description: Texto plano sin comillas. Máximo 1024 caracteres. Sin ": " (dos puntos + espacio). Sin < ni >. Todo en una sola línea. Incluye qué hace + cuándo se activa.
+# Campos opcionales permitidos:
+# license: ...
+# compatibility: ...
+# metadata:
+#   version: "1.0"
+#   type: workflow
+# allowed-tools: ...
+# user-invocable: false   # si no quieres que aparezca en el menú de slash commands
+---Cómo crear una skill de forma óptima (paso a paso)
+Define el caso de uso real
+¿Qué tareas concretas debe manejar?
+¿Qué diría el usuario para activarla?
+¿Qué conocimiento no tiene ya el modelo?
+
+Planifica los recursos
+Código que se reescribe siempre → scripts/
+Documentación larga → references/
+Plantillas / boilerplate → assets/
+
+InicializaBashbash /root/.grok/skills/skill-creator/scripts/init-skill.sh mi-skill /home/workdir/.grok/skills --resources scripts,references,assets
+Escribe SKILL.md
+Frontmatter primero (la descripción es lo más importante).
+Cuerpo en forma imperativa y concisa.
+Referencia los archivos con rutas relativas.
+
+ValidaBashbash /root/.grok/skills/skill-creator/scripts/validate-skill.sh /home/workdir/.grok/skills/mi-skill
+Itera
+Úsala en tareas reales.
+Corrige huecos.
+Mantén SKILL.md < 500 líneas.
+
+Anti-patrones a evitar
+Duplicar conocimiento general del modelo.
+Poner información de activación en el cuerpo (solo en description).
+Crear README.md, CHANGELOG.md, etc. (las skills son para el agente, no para humanos).
+Anidar referencias.
+Superar ~500 líneas en SKILL.md.
+Con esta estructura tienes skills totalmente reutilizables en proyectos de cualquier lenguaje: la skill se activa por la descripción, carga solo lo necesario y puede incluir scripts multi-lenguaje + referencias genéricas de arquitectura, testing, diseño de APIs, etc.

@@ -1,0 +1,795 @@
+## Skill: Escaneo Inteligente Universal - Sistema de Descubrimiento y Análisis de Sistemas de Archivos
+
+**Descripción General:**
+Implementar un sistema universal, reutilizable e inteligente de descubrimiento y análisis de sistemas de archivos que examine automáticamente una ruta de entrada y devuelva una estructura completa con carpetas, archivos válidos, extensiones compatibles, archivos ocultos, duplicados, elementos excluidos y estadísticas detalladas. Este sistema debe ser una capa independiente de descubrimiento que pueda reutilizarse en conversores, analizadores, indexadores, compresores, migradores, buscadores o cualquier aplicación que necesite conocer previamente qué archivos existen y cuáles pueden procesarse, integrándose perfectamente con el **Progress Orchestrator** para mostrar avance durante el escaneo.
+
+---
+
+### **Fase 1: Arquitectura del Sistema de Escaneo**
+
+#### **1.1 Componentes Principales:**
+
+**SmartScanner (Escáner Principal):**
+- Punto de entrada único mediante interfaz `scan(path, options)`
+- Coordina todos los componentes del sistema
+- Gestiona el ciclo de vida completo del escaneo
+- Integra con Progress Orchestrator para mostrar avance
+- Devuelve estructura de resultados enriquecida
+
+**FileSystemWalker (Recorredor de Sistema de Archivos):**
+- Recorre directorios de forma recursiva o con profundidad limitada
+- Maneja enlaces simbólicos según configuración
+- Detecta y evita bucles infinitos
+- Respeta permisos del sistema operativo
+- Implementa traversing paralelo opcional para sistemas grandes
+
+**FileFilter (Filtrador de Archivos):**
+- Aplica criterios de inclusión/exclusión
+- Filtra por extensiones, patrones, tamaño, fecha
+- Detecta archivos temporales y los excluye automáticamente
+- Maneja patrones glob/regex configurables
+- Soporta reglas de prioridad (incluir > excluir)
+
+**DuplicateDetector (Detector de Duplicados):**
+- Identifica archivos duplicados mediante múltiples estrategias
+- Estrategia rápida: comparación por tamaño + nombre
+- Estrategia media: comparación por tamaño + hash parcial
+- Estrategia completa: comparación por hash completo (SHA-256, MD5)
+- Configurable según precisión vs velocidad deseada
+
+**StatisticsCalculator (Calculador de Estadísticas):**
+- Calcula totales de carpetas, archivos, tamaños
+- Agrupa por extensión, carpeta, tipo
+- Detecta patrones (archivos más grandes, más antiguos, etc.)
+- Genera resumen ejecutivo del escaneo
+
+**CacheManager (Gestor de Caché):**
+- Cachea resultados de escaneos anteriores
+- Invalida caché cuando detecta cambios en el sistema
+- Permite modo rápido reutilizando resultados previos
+- Almacena metadata: timestamp, hash de estructura, versión
+
+---
+
+### **Fase 2: Interfaz y API Pública**
+
+#### **2.1 Método Principal:**
+
+```
+scan(path: string, options?: ScanOptions): Promise<ScanResult>
+```
+
+**Parámetros:**
+- `path`: Ruta absoluta o relativa al directorio/file a escanear
+- `options`: Objeto opcional con configuración del escaneo
+
+**Retorno:**
+- `ScanResult`: Estructura completa con todos los descubrimientos y estadísticas
+
+#### **2.2 Métodos Adicionales:**
+
+**`scanSync(path, options)`:**
+- Versión síncrona para scripts simples
+- Bloqueante, no recomendado para sistemas grandes
+
+**`scanAsync(path, options, callbacks)`:**
+- Versión con callbacks para progreso en tiempo real
+- `onProgress(percent, currentFile)`
+- `onFolderFound(folder)`
+- `onFileFound(file)`
+- `onError(error)`
+- `onComplete(result)`
+
+**`scanStream(path, options)`:**
+- Retorna un stream/iterator de archivos encontrados
+- Útil para procesamiento incremental sin esperar escaneo completo
+- Permite empezar a procesar mientras aún se está escaneando
+
+**`validatePath(path)`:**
+- Verifica si una ruta es escaneable
+- Retorna: existe, es accesible, es directorio/archivo, permisos
+
+**`getCacheStatus(path)`:**
+- Consulta estado de caché para una ruta
+- Retorna: existe caché, timestamp, validez
+
+**`clearCache(path?)`:**
+- Limpia caché de una ruta específica o toda la caché
+
+---
+
+### **Fase 3: Configuración y Opciones**
+
+#### **3.1 Objeto ScanOptions Completo:**
+
+```json
+{
+  "recursion": {
+    "enabled": true,
+    "maxDepth": null,
+    "followSymlinks": false,
+    "detectCycles": true
+  },
+  "filtering": {
+    "includeExtensions": ["jpg", "png", "pdf"],
+    "excludeExtensions": ["tmp", "log", "bak"],
+    "includePatterns": ["**/*.doc"],
+    "excludePatterns": ["**/node_modules/**", "**/.git/**"],
+    "includeHidden": false,
+    "excludeTempFiles": true,
+    "minSize": 0,
+    "maxSize": null,
+    "modifiedAfter": null,
+    "modifiedBefore": null,
+    "caseSensitive": false
+  },
+  "duplicates": {
+    "enabled": false,
+    "strategy": "fast",
+    "hashAlgorithm": "sha256"
+  },
+  "performance": {
+    "useCache": true,
+    "cacheTTL": 3600,
+    "parallel": true,
+    "maxWorkers": 4,
+    "batchSize": 100
+  },
+  "progress": {
+    "showProgress": true,
+    "updateInterval": 100,
+    "style": "auto"
+  },
+  "output": {
+    "groupByFolder": true,
+    "sortBy": "name",
+    "sortOrder": "asc",
+    "includeMetadata": true,
+    "includeStats": true
+  }
+}
+```
+
+#### **3.2 Presets Configurables:**
+
+**Preset "rápido":**
+- Sin detección de duplicados
+- Sin metadata detallada
+- Usa caché agresivamente
+- Máximo paralelismo
+
+**Preset "completo":**
+- Detección completa de duplicados (hash total)
+- Toda la metadata disponible
+- Sin caché
+- Estadísticas detalladas
+
+**Preset "producción":**
+- Equilibrio entre velocidad y precisión
+- Duplicados con hash parcial
+- Caché con TTL moderado
+- Progreso visible
+
+**Preset "mínimo":**
+- Solo listar archivos
+- Sin estadísticas
+- Sin duplicados
+- Sin progreso
+
+---
+
+### **Fase 4: Algoritmos y Lógica Interna**
+
+#### **4.1 Algoritmo de Recorrido:**
+
+**BFS (Breadth-First Search) - Por defecto:**
+- Explora nivel por nivel
+- Mejor para sistemas con muchos archivos en raíz
+- Permite limitar profundidad fácilmente
+- Memoria predecible
+
+**DFS (Depth-First Search) - Opcional:**
+- Explora rama completa antes de pasar a la siguiente
+- Mejor para sistemas profundos
+- Menos memoria para árboles muy anchos
+
+**Paralelo - Para sistemas grandes:**
+- Divide trabajo por subdirectorios de primer nivel
+- Múltiples workers procesan en paralelo
+- Requiere sincronización de resultados
+- Integración con Progress Orchestrator MultiProgress
+
+#### **4.2 Algoritmo de Detección de Duplicados:**
+
+**Estrategia "fast" (rápida):**
+```
+1. Agrupar por tamaño
+2. Dentro de cada grupo, comparar nombre
+3. Reportar posibles duplicados
+Precisión: 60% | Velocidad: muy alta
+```
+
+**Estrategia "balanced" (equilibrada):**
+```
+1. Agrupar por tamaño
+2. Calcular hash de primeros 4KB
+3. Agrupar por hash parcial
+4. Reportar duplicados probables
+Precisión: 95% | Velocidad: alta
+```
+
+**Estrategia "full" (completa):**
+```
+1. Agrupar por tamaño
+2. Calcular hash completo (SHA-256)
+3. Agrupar por hash completo
+4. Reportar duplicados confirmados
+Precisión: 100% | Velocidad: baja
+```
+
+**Estrategia "smart" (inteligente - auto):**
+- Analiza cantidad y tamaño de archivos
+- Selecciona automáticamente la mejor estrategia
+- Para <100 archivos: full
+- Para 100-1000 archivos: balanced
+- Para >1000 archivos: fast
+
+#### **4.3 Detección de Archivos Temporales:**
+
+**Lista automática de patrones temporales:**
+```
+- *.tmp, *.temp, *.bak, *.old, *.orig
+- *~, #*#, .#*
+- Thumbs.db, .DS_Store, desktop.ini
+- *.swp, *.swo (Vim)
+- __pycache__, *.pyc (Python)
+- node_modules, .cache, .tmp
+- *.log (configurable)
+```
+
+#### **4.4 Ordenamiento Natural:**
+
+**Algoritmo de ordenamiento natural (natural sort):**
+```
+Correcto:                    Incorrecto (alfabético):
+archivo1.jpg                 archivo1.jpg
+archivo2.jpg                 archivo10.jpg
+archivo10.jpg                archivo2.jpg
+archivo20.jpg                archivo20.jpg
+```
+
+**Criterios de ordenamiento disponibles:**
+- `name`: Nombre natural (alfanumérico inteligente)
+- `size`: Tamaño (ascendente/descendente)
+- `modified`: Fecha de modificación
+- `created`: Fecha de creación
+- `extension`: Por extensión
+- `path`: Por ruta completa
+
+---
+
+### **Fase 5: Estructura de Datos de Salida**
+
+#### **5.1 ScanResult Completo:**
+
+```json
+{
+  "success": true,
+  "path": "/ruta/escaneada",
+  "timestamp": "2026-10-27T14:32:45Z",
+  "duration": 2345,
+  "cacheUsed": false,
+  
+  "summary": {
+    "totalFolders": 45,
+    "totalFiles": 1234,
+    "validFiles": 1180,
+    "excludedFiles": 54,
+    "hiddenFiles": 12,
+    "duplicates": 23,
+    "totalSize": 5368709120,
+    "errors": 3
+  },
+  
+  "folders": [
+    {
+      "path": "/ruta/escaneada/documentos",
+      "name": "documentos",
+      "depth": 1,
+      "fileCount": 150,
+      "size": 1073741824,
+      "lastModified": "2026-10-25T10:00:00Z"
+    }
+  ],
+  
+  "files": {
+    "byFolder": {
+      "/ruta/escaneada/documentos": [
+        {
+          "path": "/ruta/escaneada/documentos/archivo1.pdf",
+          "name": "archivo1.pdf",
+          "extension": "pdf",
+          "size": 1048576,
+          "created": "2026-01-15T08:30:00Z",
+          "modified": "2026-10-20T14:22:00Z",
+          "permissions": "rw-r--r--",
+          "isHidden": false,
+          "isSymlink": false,
+          "hash": "abc123...",
+          "duplicateGroup": null
+        }
+      ]
+    },
+    "byExtension": {
+      "pdf": { "count": 450, "totalSize": 2147483648 },
+      "jpg": { "count": 680, "totalSize": 3221225472 },
+      "png": { "count": 50, "totalSize": 52428800 }
+    }
+  },
+  
+  "duplicates": [
+    {
+      "hash": "abc123...",
+      "size": 1048576,
+      "files": [
+        "/ruta/escaneada/doc1/archivo.pdf",
+        "/ruta/escaneada/doc2/archivo.pdf"
+      ]
+    }
+  ],
+  
+  "excluded": [
+    {
+      "path": "/ruta/escaneada/temp.bak",
+      "reason": "extension_excluded"
+    }
+  ],
+  
+  "errors": [
+    {
+      "path": "/ruta/escaneada/acceso_denegado",
+      "error": "EACCES",
+      "message": "Permiso denegado"
+    }
+  ],
+  
+  "statistics": {
+    "averageFileSize": 4330000,
+    "largestFile": {
+      "path": "/ruta/escaneada/video.mp4",
+      "size": 1073741824
+    },
+    "smallestFile": {
+      "path": "/ruta/escaneada/tiny.txt",
+      "size": 12
+    },
+    "oldestFile": {
+      "path": "/ruta/escaneada/antiguo.doc",
+      "modified": "2010-05-15T08:00:00Z"
+    },
+    "newestFile": {
+      "path": "/ruta/escaneada/reciente.pdf",
+      "modified": "2026-10-27T14:00:00Z"
+    },
+    "extensionsDistribution": {
+      "pdf": 36.5,
+      "jpg": 55.1,
+      "png": 4.1,
+      "otros": 4.3
+    }
+  }
+}
+```
+
+#### **5.2 Estructuras Auxiliares:**
+
+**ScanResultLite (versión liviana):**
+- Solo paths y conteos básicos
+- Sin metadata detallada
+- Sin estadísticas complejas
+- Para usos donde solo importa "qué archivos existen"
+
+**ScanResultStream (versión streaming):**
+- Iterator que va entregando archivos uno a uno
+- No acumula todo en memoria
+- Para sistemas con millones de archivos
+
+---
+
+### **Fase 6: Integración con Progress Orchestrator**
+
+#### **6.1 Reporte de Progreso:**
+
+El SmartScanner debe integrarse nativamente con el Progress Orchestrator:
+
+**Durante el escaneo:**
+```
+Escaneando sistema de archivos... ⠋
+  ├─ Carpetas analizadas: 45
+  ├─ Archivos encontrados: 1,234
+  ├─ Archivos válidos: 1,180
+  ├─ Duplicados detectados: 23
+  └─ Tamaño total: 5.0 GB
+```
+
+**Al finalizar:**
+```
+✅ Escaneo completado en 2.3s
+  ├─ 45 carpetas
+  ├─ 1,180 archivos válidos (5.0 GB)
+  ├─ 23 duplicados encontrados
+  ├─ 54 archivos excluidos
+  └─ 3 errores menores (ver detalles)
+```
+
+#### **6.2 Eventos Emitidos:**
+
+```
+scan.started          → Inicio del escaneo
+scan.folder.enter     → Entrando a una carpeta
+scan.folder.leave     → Saliendo de una carpeta
+scan.file.found       → Archivo encontrado
+scan.file.valid       → Archivo válido para procesar
+scan.file.excluded    → Archivo excluido
+scan.duplicate.found  → Duplicado detectado
+scan.error            → Error durante el escaneo
+scan.progress         → Actualización de progreso
+scan.completed        → Escaneo finalizado exitosamente
+scan.failed           → Escaneo falló
+scan.cancelled        → Escaneo cancelado por usuario
+```
+
+---
+
+### **Fase 7: Casos de Uso y Ejemplos**
+
+#### **Ejemplo 1: Conversor de Imágenes**
+
+```javascript
+const result = await scanner.scan('./input', {
+  filtering: {
+    includeExtensions: ['jpg', 'png', 'webp', 'gif'],
+    excludeHidden: true
+  },
+  duplicates: { enabled: true, strategy: 'balanced' }
+});
+
+// result.files.byFolder contiene las imágenes agrupadas
+// result.duplicates permite avisar al usuario antes de procesar
+// result.summary.totalFiles indica cuántas imágenes procesar
+```
+
+#### **Ejemplo 2: Indexador de Documentos**
+
+```javascript
+const result = await scanner.scan('/documentos', {
+  recursion: { maxDepth: 5 },
+  filtering: {
+    includeExtensions: ['pdf', 'doc', 'docx', 'txt'],
+    includePatterns: ['**/trabajo/**']
+  },
+  performance: { parallel: true, maxWorkers: 8 }
+});
+
+// Indexar todos los documentos encontrados
+```
+
+#### **Ejemplo 3: Limpiador de Duplicados**
+
+```javascript
+const result = await scanner.scan('/home/usuario', {
+  duplicates: { enabled: true, strategy: 'full' },
+  filtering: {
+    minSize: 1024  // Solo archivos > 1KB
+  }
+});
+
+// result.duplicates contiene todos los grupos de duplicados
+// El usuario puede decidir cuáles eliminar
+```
+
+#### **Ejemplo 4: Analizador de Uso de Disco**
+
+```javascript
+const result = await scanner.scan('/', {
+  recursion: { maxDepth: 3 },
+  output: {
+    groupByFolder: true,
+    includeStats: true
+  }
+});
+
+// result.folders contiene tamaño de cada carpeta
+// result.statistics.largestFile muestra el archivo más grande
+```
+
+#### **Ejemplo 5: Migrador de Archivos**
+
+```javascript
+const result = await scanner.scan('./legacy', {
+  filtering: {
+    modifiedBefore: '2020-01-01'
+  },
+  performance: { useCache: true }
+});
+
+// Migrar solo archivos antiguos
+```
+
+---
+
+### **Fase 8: Casos Edge y Manejo de Errores**
+
+#### **8.1 Casos Edge a Manejar:**
+
+**Permisos insuficientes:**
+- Detectar carpetas/archivos sin acceso
+- Continuar escaneo ignorando elementos inaccesibles
+- Registrar errores sin detener el proceso
+- Reportar al final cuántos elementos no se pudieron leer
+
+**Enlaces simbólicos:**
+- Detectar ciclos (A → B → A)
+- Opción de seguir o ignorar symlinks
+- Evitar duplicación por múltiples rutas al mismo archivo
+- Detectar symlinks rotos
+
+**Sistemas de archivos especiales:**
+- Detectar y saltar: /proc, /sys, /dev en Linux
+- Detectar puntos de montaje externos
+- Opción de incluir/excluir sistemas remotos (NFS, SMB)
+
+**Archivos especiales:**
+- Detectar sockets, FIFOs, dispositivos
+- Excluir por defecto (solo archivos regulares)
+- Opción de incluir si el usuario lo necesita
+
+**Rutas muy largas:**
+- Manejo de paths > 260 caracteres (Windows)
+- Soporte para prefijo \\?\ en Windows
+- Truncamiento seguro en reportes
+
+**Sistemas de archivos lentos:**
+- Detectar latencia alta (red, disco externo)
+- Ajustar timeouts automáticamente
+- Modo "perezoso" que solo escanea lo necesario
+
+**Interrupciones:**
+- Manejar Ctrl+C limpiamente
+- Guardar estado parcial para reanudar
+- Opción de reanudar escaneo desde donde quedó
+
+---
+
+### **Fase 9: Optimizaciones de Rendimiento**
+
+#### **9.1 Técnicas de Optimización:**
+
+**Lectura en lote (batch reading):**
+- Leer directorios en lotes de N entradas
+- Reduce llamadas al sistema
+- Mejora rendimiento en sistemas con muchos archivos
+
+**Paralelismo controlado:**
+- Workers paralelos para subdirectorios independientes
+- Pool de workers con tamaño configurable
+- Balanceo de carga dinámico
+
+**Caché inteligente:**
+- Hash de estructura de directorios (mtimes + nombres)
+- Invalidación automática al detectar cambios
+- Caché por ruta específica
+- TTL configurable
+
+**Early termination:**
+- Detener escaneo si se alcanza límite de archivos
+- Detener si se alcanza límite de tamaño
+- Detener si se encuentra archivo específico
+
+**Lazy evaluation:**
+- No calcular metadata hasta que se solicite
+- Hash solo cuando se necesite para duplicados
+- Estadísticas calculadas bajo demanda
+
+**Memoria eficiente:**
+- Streaming para sistemas muy grandes
+- Liberación progresiva de memoria
+- Estructuras compactas para paths
+
+---
+
+### **Fase 10: Implementación por Lenguaje**
+
+#### **Node.js:**
+```javascript
+// Librerías recomendadas:
+// - fast-glob (patrón matching rápido)
+// - readdirp (recorrido recursivo)
+// - globby (glob patterns)
+// - graceful-fs (manejo robusto de FS)
+```
+
+#### **Python:**
+```python
+# Librerías recomendadas:
+# - pathlib (manejo moderno de paths)
+# - os.walk (recorrido clásico)
+# - scandir (recorrido rápido)
+# - pathspec (gitignore patterns)
+```
+
+#### **Rust:**
+```rust
+// Crates recomendados:
+// - walkdir (recorrido recursivo)
+// - ignore (respetar .gitignore)
+// - globset (patrones glob)
+// - rayon (paralelismo)
+// - sha2/sha256 (hashing)
+```
+
+#### **Go:**
+```go
+// Paquetes recomendados:
+// - filepath.Walk (recorrido estándar)
+// - bmatcuk/doublestar (glob patterns)
+// - hash/fnv, crypto/sha256 (hashing)
+```
+
+#### **Bash/Shell:**
+```bash
+# Comandos nativos:
+# - find (búsqueda)
+# - fd (alternativa moderna a find)
+# - ripgrep (búsqueda rápida de contenido)
+# - tree (visualización)
+```
+
+---
+
+### **Fase 11: Integración con Otros Skills**
+
+#### **11.1 Relación con Bootstrap Inteligente:**
+- Puede usarse durante el bootstrap para detectar estructura de proyecto
+- Detectar si hay archivos de configuración existentes
+- Validar que input/output están correctamente configurados
+
+#### **11.2 Relación con Menús Adaptativos:**
+- El menú puede mostrar resumen de escaneo previo
+- Opción "Escanear sistema" en el menú
+- Mostrar estadísticas rápidas antes de procesar
+
+#### **11.3 Relación con Progress Orchestrator:**
+- Integración nativa para mostrar progreso de escaneo
+- Usar MultiProgress para escaneos paralelos
+- Reportar fases: descubriendo, filtrando, detectando duplicados, calculando stats
+
+#### **11.4 Relación con Gestión de Directorios:**
+- Validar que input existe y tiene archivos
+- Crear output si no existe después del escaneo
+- Limpiar temporales detectados durante el escaneo
+
+#### **11.5 Relación con Banners:**
+- El banner puede mostrar resumen del último escaneo
+- Información contextual: "1,234 archivos listos para procesar"
+
+---
+
+### **Fase 12: Configuración Persistente**
+
+#### **12.1 Archivo de Configuración (`.scanner.json`):**
+
+```json
+{
+  "version": "1.0.0",
+  "defaults": {
+    "recursion": { "maxDepth": null },
+    "filtering": {
+      "excludePatterns": ["**/node_modules/**", "**/.git/**"]
+    },
+    "performance": { "useCache": true }
+  },
+  "presets": {
+    "imagenes": {
+      "filtering": {
+        "includeExtensions": ["jpg", "png", "webp", "gif", "bmp"]
+      }
+    },
+    "documentos": {
+      "filtering": {
+        "includeExtensions": ["pdf", "doc", "docx", "txt", "md"]
+      }
+    }
+  },
+  "cache": {
+    "enabled": true,
+    "location": ".cache/scanner",
+    "maxAge": 86400
+  }
+}
+```
+
+---
+
+### **Fase 13: Accesibilidad y Compatibilidad**
+
+#### **13.1 Compatibilidad Multiplataforma:**
+
+**Windows:**
+- Soporte para paths largos (>260 chars)
+- Manejo de separadores (\ y /)
+- Permisos NTFS
+- Symlinks (requieren privilegios)
+
+**Linux:**
+- Soporte completo para symlinks
+- Permisos POSIX
+- Sistemas de archivos especiales
+- Case-sensitive por defecto
+
+**macOS:**
+- Manejo de archivos .DS_Store
+- Atributos extendidos (xattr)
+- Recursos fork (legacy)
+- Case-insensitive por defecto
+
+#### **13.2 Accesibilidad:**
+- Salida compatible con lectores de pantalla
+- Opción de salida en texto plano sin caracteres especiales
+- Soporte para terminales sin colores
+- Mensajes claros y descriptivos
+
+---
+
+### **Fase 14: Testing y Validación**
+
+#### **14.1 Estrategia de Testing:**
+
+**Unit tests:**
+- Cada componente por separado
+- Mock del sistema de archivos
+- Casos edge cubiertos
+
+**Integration tests:**
+- Escaneo de estructuras reales
+- Diferentes sistemas de archivos
+- Diferentes sistemas operativos
+
+**Performance tests:**
+- Escaneo de 10, 100, 1000, 10000, 100000 archivos
+- Medición de memoria y tiempo
+- Comparación con herramientas existentes
+
+**Fuzzing:**
+- Paths malformados
+- Caracteres especiales
+- Paths muy largos
+- Symlinks circulares
+
+---
+
+### **Fase 15: Beneficios del Sistema**
+
+✅ **Universal:** Aplica a cualquier tipo de sistema de archivos  
+✅ **Reutilizable:** Una vez implementado, sirve para múltiples aplicaciones  
+✅ **Inteligente:** Detecta automáticamente patrones y optimiza el escaneo  
+✅ **Configurable:** Cada aspecto puede personalizarse según necesidades  
+✅ **Robusto:** Maneja errores, permisos y casos edge correctamente  
+✅ **Rápido:** Optimizaciones de rendimiento para sistemas grandes  
+✅ **Concurrente:** Soporta escaneos paralelos sin bloquear  
+✅ **Con caché:** Reutiliza resultados previos para velocidad  
+✅ **Detecta duplicados:** Múltiples estrategias según precisión deseada  
+✅ **Estadísticas ricas:** Información detallada del sistema escaneado  
+✅ **Integrable:** Trabaja con Progress Orchestrator, Bootstrap, Menús  
+✅ **Multiplataforma:** Funciona en Windows, Linux, macOS  
+✅ **Accesible:** Compatible con terminales limitadas  
+✅ **Streaming:** Soporte para sistemas con millones de archivos  
+✅ **Extensible:** Fácil agregar nuevos filtros y estrategias  
+
+---
+
+### **Conclusión:**
+
+Esta skill transforma el escaneo de sistemas de archivos de una tarea tediosa y propensa a errores en un sistema inteligente, robusto y reutilizable. El SmartScanner Universal puede integrarse en cualquier aplicación que necesite descubrir y analizar archivos, manteniendo la misma interfaz y comportamiento aunque cambie el caso de uso específico. Se integra perfectamente con los otros skills (Bootstrap, Menús Adaptativos, Banners, Progress Orchestrator, Gestión de Directorios) para crear aplicaciones CLI completas, profesionales y con excelente experiencia de usuario.
+
+El sistema es lo suficientemente flexible para usarse en conversores de imágenes, indexadores de documentos, limpiadores de duplicados, analizadores de disco, migradores de archivos, buscadores de contenido, validadores de estructura, y cualquier otra aplicación que necesite "saber qué hay" antes de procesar.

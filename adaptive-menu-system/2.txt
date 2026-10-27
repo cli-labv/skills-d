@@ -1,0 +1,248 @@
+## Skill: Sistema Inteligente de Menús Adaptativos (Meta-Menu Builder)
+
+**Descripción General:**
+Implementar un sistema universal de generación de menús interactivos que se adapte dinámicamente al contexto de la aplicación, preguntando al usuario qué funcionalidades necesita y sugiriendo opciones basadas en el tipo de aplicación y su propósito.
+
+---
+
+### **Fase 1: Descubrimiento y Análisis de Contexto**
+
+**1.1 Identificación del Tipo de Aplicación:**
+El sistema debe preguntar y determinar:
+- ¿Qué tipo de interfaz tendrá la app? (CLI, GUI Desktop, Web, Mobile, API)
+- ¿Cuál es el propósito principal de la aplicación?
+- ¿Qué tipo de recursos maneja? (archivos, datos, sesiones, usuarios, configuraciones)
+- ¿Quiénes son los usuarios objetivo? (desarrolladores, usuarios finales, administradores)
+
+**1.2 Análisis de Recursos y Entidades:**
+El sistema debe identificar:
+- ¿Qué entidades principales gestiona la app? (ej: sesiones, archivos, usuarios, proyectos)
+- ¿Qué operaciones son comunes para estas entidades? (crear, leer, actualizar, eliminar, exportar)
+- ¿Existen relaciones entre entidades? (ej: sesiones contienen archivos)
+
+---
+
+### **Fase 2: Generación Inteligente de Sugerencias**
+
+**2.1 Motor de Recomendaciones:**
+Basado en el contexto identificado, el sistema debe sugerir opciones de menú categorizadas:
+
+**Categoría: Gestión de Datos/Recursos**
+- Listar/Visualizar recursos disponibles
+- Crear nuevo recurso
+- Importar recursos desde externos
+- Exportar recursos a formatos estándar
+- Buscar/Filtrar recursos
+- Ordenar recursos por diferentes criterios
+
+**Categoría: Operaciones Masivas**
+- Selección múltiple interactiva
+- Borrado masivo con confirmación
+- Procesamiento en lote
+- Backup/Restauración masiva
+
+**Categoría: Configuración y Preferencias**
+- Configurar opciones globales
+- Gestionar perfiles/temas
+- Establecer preferencias de usuario
+- Configurar atajos de teclado
+
+**Categoría: Monitoreo y Estado**
+- Ver estado del sistema
+- Mostrar estadísticas y métricas
+- Ver logs/historial de actividad
+- Monitorear procesos en ejecución
+
+**Categoría: Ayuda y Documentación**
+- Mostrar ayuda contextual
+- Ver tutoriales/ejemplos
+- Acerca de/Versión
+- Reportar problemas
+
+**Categoría: Sistema**
+- Salir/Cerrar aplicación
+- Reiniciar servicio
+- Actualizar aplicación
+- Limpiar caché/temporales
+
+**2.2 Sugerencias Contextuales Específicas:**
+
+**Para Apps de Procesamiento de Archivos:**
+- Seleccionar carpeta de entrada
+- Configurar formatos de salida
+- Ver progreso de procesamiento
+- Cancelar operaciones en curso
+
+**Para Apps de Gestión de Sesiones/Conexiones:**
+- Conectar/Desconectar
+- Ver sesiones activas
+- Gestionar credenciales
+- Configurar timeouts
+
+**Para Apps de Base de Datos:**
+- Ejecutar consultas
+- Gestionar esquemas
+- Backup/Restore
+- Optimizar índices
+
+**Para Apps de Desarrollo/DevOps:**
+- Desplegar aplicación
+- Ver logs en tiempo real
+- Gestionar contenedores
+- Ejecutar tests
+
+---
+
+### **Fase 3: Personalización y Configuración del Menú**
+
+**3.1 Selección de Opciones:**
+El sistema debe permitir al usuario:
+- Aceptar todas las sugerencias automáticamente
+- Seleccionar manualmente qué opciones incluir
+- Agregar opciones personalizadas
+- Reordenar las opciones según prioridad
+- Crear submenús para organizar opciones relacionadas
+
+**3.2 Configuración de Comportamiento:**
+- ¿El menú debe ser cíclico? (volver al menú después de cada acción)
+- ¿Requiere confirmación para acciones destructivas?
+- ¿Debe mostrar atajos de teclado?
+- ¿Necesita colores/estilos visuales?
+- ¿Debe persistir la última opción seleccionada?
+
+---
+
+### **Fase 4: Implementación Adaptativa**
+
+**4.1 Generación de Código Multi-Plataforma:**
+El sistema debe generar código apropiado para:
+
+**CLI (Terminal):**
+- Usar bibliotecas como: Inquirer.js, Prompt Toolkit, Dialog, Whiptail
+- Navegación con flechas y teclas
+- Soporte para colores ANSI
+- Autocompletado de texto
+
+**GUI Desktop:**
+- Usar frameworks como: Tkinter, PyQt, Electron, Swing
+- Menús desplegables o barras laterales
+- Iconos y tooltips
+- Atajos de teclado globales
+
+**Web:**
+- Menús de navegación responsive
+- Dropdowns y modales
+- Soporte para touch en móviles
+- Accesibilidad (ARIA labels)
+
+**Mobile:**
+- Menús hamburguesa o bottom sheets
+- Gestos táctiles (swipe, long-press)
+- Navegación por tabs
+- Feedback háptico
+
+**4.2 Patrones de Interacción:**
+- Menú numerado simple (1, 2, 3...)
+- Menú con flechas y selección visual
+- Menú con búsqueda/filtrado
+- Menú con categorías expandibles
+- Menú con comandos de texto (estilo Vim/Emacs)
+
+---
+
+### **Fase 5: Validación y Testing**
+
+**5.1 Verificación de Completitud:**
+- ¿Todas las opciones tienen handlers implementados?
+- ¿Hay opción de salir en todos los menús?
+- ¿Las acciones destructivas tienen confirmación?
+- ¿Los mensajes de error son claros?
+
+**5.2 Testing de Usabilidad:**
+- Navegación intuitiva
+- Feedback visual adecuado
+- Manejo de casos edge (listas vacías, errores de permisos)
+- Performance con grandes cantidades de elementos
+
+---
+
+### **Flujo de Trabajo del Sistema:**
+
+```
+1. INICIO: Sistema pregunta sobre la aplicación
+   ├─ ¿Qué tipo de app es?
+   ├─ ¿Qué recursos maneja?
+   └─ ¿Qué necesitan los usuarios?
+
+2. ANÁLISIS: Sistema procesa respuestas
+   ├─ Identifica patrones comunes
+   ├─ Detecta operaciones típicas
+   └─ Genera contexto de uso
+
+3. SUGERENCIAS: Sistema propone opciones
+   ├─ Muestra lista de opciones recomendadas
+   ├─ Explica por qué cada opción es útil
+   └─ Permite personalizar/agregar/quitar
+
+4. CONFIGURACIÓN: Usuario ajusta el menú
+   ├─ Selecciona opciones finales
+   ├─ Define orden y jerarquía
+   └─ Configura comportamiento
+
+5. GENERACIÓN: Sistema crea el código
+   ├─ Genera código para la plataforma elegida
+   ├─ Implementa handlers para cada opción
+   └─ Crea estructura de navegación
+
+6. VALIDACIÓN: Sistema verifica el resultado
+   ├─ Prueba todas las rutas de navegación
+   ├─ Verifica que no haya opciones huérfanas
+   └─ Confirma que el menú es usable
+```
+
+---
+
+### **Ejemplo de Uso:**
+
+**Usuario:** "Tengo una app CLI en Python para procesar imágenes"
+
+**Sistema pregunta:**
+- ¿Qué tipo de imágenes? (JPEG, PNG, RAW, todas)
+- ¿Qué operaciones necesitas? (redimensionar, convertir, comprimir, filtrar)
+- ¿Procesas una imagen o muchas a la vez?
+
+**Usuario responde:** "JPEG y PNG, necesito redimensionar y convertir, proceso muchas a la vez"
+
+**Sistema sugiere:**
+```
+Menú Principal:
+1. 📁 Seleccionar carpeta de entrada
+2. 📋 Ver lista de imágenes encontradas
+3. ⚙️ Configurar opciones de procesamiento
+   ├─ Redimensionar (ancho/alto/porcentaje)
+   ├─ Convertir formato (JPEG ↔ PNG)
+   ├─ Calidad de compresión
+   └─ Carpeta de salida
+4. 🚀 Iniciar procesamiento por lotes
+5. 📊 Ver progreso y estadísticas
+6. ⏹️ Cancelar procesamiento actual
+7. 🗑️ Limpiar archivos temporales
+8. ⚡ Configuración rápida (presets)
+9. ❓ Ayuda
+0. 🚪 Salir
+```
+
+---
+
+### **Beneficios de este Sistema:**
+
+✅ **Universal:** Funciona para cualquier tipo de aplicación  
+✅ **Inteligente:** Sugiere opciones basadas en el contexto  
+✅ **Flexible:** Se adapta a diferentes plataformas y tecnologías  
+✅ **Escalable:** Puede crecer con la aplicación  
+✅ **Consistente:** Mantiene patrones de UX uniformes  
+✅ **Eficiente:** Reduce tiempo de diseño de menús  
+
+---
+
+Esta skill convierte la creación de menús de un proceso manual y repetitivo en un sistema automatizado e inteligente que se adapta a las necesidades específicas de cada aplicación.

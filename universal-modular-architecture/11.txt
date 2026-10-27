@@ -1,0 +1,1462 @@
+## Skill: Arquitectura Modular Universal - Sistema de Organización de Aplicaciones en Componentes Independientes
+
+**Descripción General:**
+Implementar un sistema universal, reutilizable y estricto de arquitectura modular que organice cualquier aplicación en componentes independientes, reutilizables y fáciles de probar, evitando que toda la lógica quede concentrada en un único archivo o función; el sistema debe definir una estructura base separando como mínimo configuración, entrada de usuario, escaneo, validación, procesamiento, progreso, caché, almacenamiento de resultados, reportes, errores y utilidades, con contratos claros entre módulos para que cada componente pueda sustituirse sin modificar el resto del sistema; debe proporcionar reglas para definir responsabilidades únicas, interfaces, modelos de datos, inyección de dependencias, manejo común de errores, configuración por entorno y pruebas unitarias, además de establecer qué módulos son obligatorios y cuáles opcionales según el tipo de proyecto; también debe incluir plantillas de directorios, convenciones de nombres, flujo de ejecución por fases, puntos de extensión y una lista de comprobación de calidad para comprobar que la aplicación no mezcla la lógica de negocio con la interfaz, el acceso a archivos o la configuración, permitiendo reutilizar la misma arquitectura en conversores, herramientas CLI, servicios web, analizadores y aplicaciones de automatización, e integrando coherentemente todos los demás skills del ecosistema (**Bootstrap Inteligente**, **Menús Adaptativos**, **Banners**, **Progress Orchestrator**, **SmartScanner**, **IncrementalCache**, **ParallelOrchestrator**, **ValidationOrchestrator**, **MemoryController**).
+
+---
+
+### **Fase 1: Principios Fundamentales de la Arquitectura**
+
+#### **1.1 Los 7 Principios Rectores:**
+
+**Principio 1: Responsabilidad Única (SRP):**
+- Cada módulo tiene una sola razón para cambiar
+- Un módulo no debe saber cómo funcionan los demás
+- Si un módulo hace más de una cosa, debe dividirse
+
+**Principio 2: Abierto/Cerrado (OCP):**
+- Los módulos están abiertos a extensión pero cerrados a modificación
+- Nuevas funcionalidades se agregan mediante nuevos módulos, no modificando existentes
+- Uso intensivo de interfaces y puntos de extensión
+
+**Principio 3: Inversión de Dependencias (DIP):**
+- Los módulos dependen de abstracciones (interfaces), no de implementaciones
+- La inyección de dependencias es obligatoria, no opcional
+- Facilita testing con mocks y stubs
+
+**Principio 4: Segregación de Interfaces (ISP):**
+- Interfaces pequeñas y específicas, no "god interfaces"
+- Cada módulo implementa solo lo que necesita
+- Composición sobre herencia
+
+**Principio 5: Separación de Preocupaciones (SoC):**
+- Lógica de negocio separada de I/O
+- UI separada de lógica
+- Configuración separada de código
+- Errores manejados en un solo lugar
+
+**Principio 6: Mínimo Conocimiento (Law of Demeter):**
+- Un módulo solo habla con sus amigos inmediatos
+- No encadenar llamadas a través de múltiples objetos
+- Facilita refactorización
+
+**Principio 7: DRY con Límites:**
+- No repetir lógica, pero tampoco sobre-abstraer
+- Una abstracción solo es válida si se usa en 3+ lugares
+- Preferir duplicación accidental sobre abstracción prematura
+
+---
+
+#### **1.2 Reglas de Oro de la Arquitectura:**
+
+**Regla 1: Prohibido el "God Object":**
+- Ningún módulo puede tener más de 500 líneas de código
+- Ningún módulo puede tener más de 10 métodos públicos
+- Si se excede, debe dividirse
+
+**Regla 2: Prohibido el Acoplamiento Directo:**
+- Los módulos no pueden importar implementaciones concretas de otros módulos
+- Solo pueden importar interfaces/contratos
+- Excepción: el módulo de composición (raíz)
+
+**Regla 3: Prohibido el Estado Global:**
+- No variables globales mutables
+- No singletons con estado
+- Estado compartido debe gestionarse explícitamente
+
+**Regla 4: Prohibido el I/O en Lógica de Negocio:**
+- La lógica de negocio no puede leer/escribir archivos directamente
+- La lógica de negocio no puede hacer llamadas de red
+- Todo I/O debe pasar por módulos especializados
+
+**Regla 5: Prohibido el Hardcoding:**
+- Ningún valor fijo en el código
+- Todo configurable vía archivos de configuración
+- Rutas, límites, timeouts, mensajes → configuración
+
+**Regla 6: Obligatorio el Manejo Explícito de Errores:**
+- Ningún error puede ser ignorado
+- Cada módulo define sus propios tipos de error
+- Los errores se propagan mediante resultados tipados
+
+**Regla 7: Obligatorio el Testing:**
+- Cada módulo público debe tener tests unitarios
+- Cobertura mínima del 80%
+- Tests de integración para flujos completos
+
+---
+
+### **Fase 2: Estructura de Directorios Estándar**
+
+#### **2.1 Estructura Base Universal:**
+
+```
+mi-app/
+├── 📄 README.md
+├── 📄 LICENSE
+├── 📄 .gitignore
+├── 📄 package.json / Cargo.toml / pyproject.toml / go.mod
+│
+├── 📁 src/                          # Código fuente principal
+│   ├── 📄 main.ts                   # Punto de entrada (composición raíz)
+│   ├── 📄 app.ts                    # Clase/función principal de la app
+│   │
+│   ├── 📁 config/                   # 🎛️ Módulo de Configuración
+│   │   ├── 📄 config.schema.ts      # Definición del esquema
+│   │   ├── 📄 config.loader.ts      # Cargador de configuración
+│   │   ├── 📄 config.validator.ts   # Validador de configuración
+│   │   ├── 📄 config.defaults.ts    # Valores por defecto
+│   │   └── 📄 config.types.ts       # Tipos/Interfaces
+│   │
+│   ├── 📁 input/                    # 📥 Módulo de Entrada de Usuario
+│   │   ├── 📄 input.parser.ts       # Parser de argumentos CLI
+│   │   ├── 📄 input.prompts.ts      # Prompts interactivos
+│   │   ├── 📄 input.menu.ts         # Menús adaptativos
+│   │   ├── 📄 input.validators.ts   # Validación de entrada
+│   │   └── 📄 input.types.ts        # Tipos de entrada
+│   │
+│   ├── 📁 scanner/                  # 🔍 Módulo de Escaneo
+│   │   ├── 📄 scanner.core.ts       # Lógica principal de escaneo
+│   │   ├── 📄 scanner.walker.ts     # Recorredor de FS
+│   │   ├── 📄 scanner.filter.ts     # Filtrado de archivos
+│   │   ├── 📄 scanner.duplicates.ts # Detección de duplicados
+│   │   └── 📄 scanner.types.ts      # Tipos de escaneo
+│   │
+│   ├── 📁 validation/               # ✅ Módulo de Validación
+│   │   ├── 📄 validation.orchestrator.ts
+│   │   ├── 📄 validation.rules.ts
+│   │   ├── 📄 validation.validators.ts
+│   │   ├── 📄 validation.security.ts
+│   │   └── 📄 validation.types.ts
+│   │
+│   ├── 📁 processing/               # ⚙️ Módulo de Procesamiento (Lógica de Negocio)
+│   │   ├── 📄 processing.core.ts    # Orquestador de procesamiento
+│   │   ├── 📄 processing.pipeline.ts
+│   │   ├── 📄 processing.workers.ts # Workers especializados
+│   │   ├── 📄 processing.strategies.ts
+│   │   └── 📄 processing.types.ts
+│   │
+│   ├── 📁 parallel/                 # 🔄 Módulo de Paralelismo
+│   │   ├── 📄 parallel.orchestrator.ts
+│   │   ├── 📄 parallel.pool.ts
+│   │   ├── 📄 parallel.queue.ts
+│   │   └── 📄 parallel.types.ts
+│   │
+│   ├── 📁 memory/                   # 🧠 Módulo de Control de Memoria
+│   │   ├── 📄 memory.controller.ts
+│   │   ├── 📄 memory.pool.ts
+│   │   ├── 📄 memory.monitor.ts
+│   │   └── 📄 memory.types.ts
+│   │
+│   ├── 📁 cache/                    # 💾 Módulo de Caché
+│   │   ├── 📄 cache.manager.ts
+│   │   ├── 📄 cache.store.ts
+│   │   ├── 📄 cache.invalidation.ts
+│   │   └── 📄 cache.types.ts
+│   │
+│   ├── 📁 output/                   # 📤 Módulo de Salida/Almacenamiento
+│   │   ├── 📄 output.writer.ts
+│   │   ├── 📄 output.formatter.ts
+│   │   ├── 📄 output.storage.ts
+│   │   └── 📄 output.types.ts
+│   │
+│   ├── 📁 progress/                 # 📊 Módulo de Progreso
+│   │   ├── 📄 progress.orchestrator.ts
+│   │   ├── 📄 progress.renderers.ts
+│   │   ├── 📄 progress.styles.ts
+│   │   └── 📄 progress.types.ts
+│   │
+│   ├── 📁 ui/                       # 🎨 Módulo de UI/Presentación
+│   │   ├── 📄 ui.banner.ts
+│   │   ├── 📄 ui.messages.ts
+│   │   ├── 📄 ui.colors.ts
+│   │   ├── 📄 ui.themes.ts
+│   │   └── 📄 ui.types.ts
+│   │
+│   ├── 📁 reporting/                # 📋 Módulo de Reportes
+│   │   ├── 📄 reporting.generator.ts
+│   │   ├── 📄 reporting.templates.ts
+│   │   ├── 📄 reporting.formatters.ts
+│   │   └── 📄 reporting.types.ts
+│   │
+│   ├── 📁 errors/                   # ❌ Módulo de Errores
+│   │   ├── 📄 errors.definitions.ts # Tipos de error
+│   │   ├── 📄 errors.handler.ts     # Manejador global
+│   │   ├── 📄 errors.logger.ts      # Logger
+│   │   ├── 📄 errors.recovery.ts    # Estrategias de recuperación
+│   │   └── 📄 errors.types.ts
+│   │
+│   ├── 📁 i18n/                     # 🌍 Módulo de Internacionalización
+│   │   ├── 📄 i18n.manager.ts
+│   │   ├── 📄 i18n.detector.ts
+│   │   └── 📁 locales/
+│   │       ├── 📄 es.json
+│   │       ├── 📄 en.json
+│   │       └── 📄 fr.json
+│   │
+│   └── 📁 utils/                    # 🛠️ Utilidades Compartidas
+│       ├── 📄 utils.fs.ts           # Operaciones de FS
+│       ├── 📄 utils.path.ts         # Manipulación de paths
+│       ├── 📄 utils.time.ts         # Timeouts, delays
+│       ├── 📄 utils.hash.ts         # Hashing
+│       ├── 📄 utils.format.ts       # Formateo
+│       └── 📄 utils.types.ts
+│
+├── 📁 tests/                        # 🧪 Tests
+│   ├── 📁 unit/                     # Tests unitarios (por módulo)
+│   │   ├── 📄 scanner.test.ts
+│   │   ├── 📄 validation.test.ts
+│   │   └── ...
+│   ├── 📁 integration/              # Tests de integración
+│   │   └── 📄 full-flow.test.ts
+│   ├── 📁 e2e/                      # Tests end-to-end
+│   │   └── 📄 cli.test.ts
+│   └── 📁 fixtures/                 # Datos de prueba
+│       ├── 📁 input/
+│       └── 📁 expected/
+│
+├── 📁 docs/                         # 📚 Documentación
+│   ├── 📄 architecture.md
+│   ├── 📄 api.md
+│   ├── 📄 modules.md
+│   └── 📄 contributing.md
+│
+├── 📁 scripts/                      # 🔧 Scripts de automatización
+│   ├── 📄 start.sh                  # Bootstrap inteligente
+│   ├── 📄 build.sh
+│   ├── 📄 test.sh
+│   └── 📄 lint.sh
+│
+├── 📁 config/                       # 📁 Archivos de configuración
+│   ├── 📄 default.json
+│   ├── 📄 development.json
+│   ├── 📄 production.json
+│   └── 📄 test.json
+│
+└── 📁 .github/                      # 🔄 CI/CD
+    └── 📁 workflows/
+        └── 📄 ci.yml
+```
+
+---
+
+#### **2.2 Convenciones de Nombres:**
+
+**Archivos:**
+- `kebab-case.ts` para todos los archivos
+- Patrón: `modulo.rol.ts` (ej: `scanner.core.ts`, `cache.manager.ts`)
+- Tipos siempre en `*.types.ts`
+- Tests en `*.test.ts` o `*.spec.ts`
+
+**Directorios:**
+- `kebab-case` para todos los directorios
+- Nombre del módulo en singular (ej: `scanner/`, no `scanners/`)
+
+**Clases/Interfaces:**
+- `PascalCase` (ej: `SmartScanner`, `MemoryController`)
+- Interfaces con prefijo `I` opcional según lenguaje
+- Tipos con sufijo `Type` o sin prefijo
+
+**Funciones/Métodos:**
+- `camelCase` (ej: `scanDirectory`, `validateInput`)
+- Verbos para acciones (get, set, create, delete, process)
+- Sustantivos para getters (files, config, status)
+
+**Constantes:**
+- `UPPER_SNAKE_CASE` (ej: `MAX_BUFFER_SIZE`, `DEFAULT_TIMEOUT`)
+
+**Variables:**
+- `camelCase` descriptivo
+- Evitar abreviaciones excepto las universalmente conocidas
+
+**Eventos:**
+- `past-tense` (ej: `scan.completed`, `file.processed`)
+
+---
+
+### **Fase 3: Contratos e Interfaces**
+
+#### **3.1 Principios de Diseño de Contratos:**
+
+**Regla 1: Contratos Estables:**
+- Las interfaces públicas no deben cambiar frecuentemente
+- Cambios rompen compatibilidad → versionado semántico
+- Documentar cada método con su contrato (pre/post condiciones)
+
+**Regla 2: Contratos Mínimos:**
+- Solo exponer lo necesario
+- Ocultar detalles de implementación
+- Principio de mínimo conocimiento
+
+**Regla 3: Contratos Tipados:**
+- Todos los parámetros y retornos deben estar tipados
+- Usar tipos estrictos, no `any` o `object`
+- Validar tipos en runtime si el lenguaje lo permite
+
+**Regla 4: Contratos Inmutables:**
+- Los datos que entran/salen no deben mutar
+- Retornar copias, no referencias
+- Previene bugs sutiles
+
+---
+
+#### **3.2 Ejemplo de Contrato para SmartScanner:**
+
+```typescript
+// scanner.types.ts
+
+// Contrato de entrada
+export interface ScanOptions {
+  readonly path: string;
+  readonly recursion: RecursionOptions;
+  readonly filtering: FilteringOptions;
+  readonly duplicates: DuplicatesOptions;
+  readonly performance: PerformanceOptions;
+  readonly progress: ProgressOptions;
+}
+
+// Contrato de salida
+export interface ScanResult {
+  readonly success: boolean;
+  readonly path: string;
+  readonly timestamp: Date;
+  readonly duration: number;
+  readonly summary: ScanSummary;
+  readonly folders: readonly FolderInfo[];
+  readonly files: FilesByCategory;
+  readonly duplicates: readonly DuplicateGroup[];
+  readonly excluded: readonly ExcludedItem[];
+  readonly errors: readonly ScanError[];
+  readonly statistics: ScanStatistics;
+}
+
+// Contrato del módulo
+export interface IScanner {
+  scan(path: string, options?: Partial<ScanOptions>): Promise<ScanResult>;
+  scanSync(path: string, options?: Partial<ScanOptions>): ScanResult;
+  validatePath(path: string): Promise<PathValidation>;
+  getCacheStatus(path: string): CacheStatus;
+  clearCache(path?: string): Promise<void>;
+}
+
+// Contrato de eventos
+export interface ScannerEvents {
+  'scan.started': (path: string) => void;
+  'scan.folder.enter': (folder: FolderInfo) => void;
+  'scan.file.found': (file: FileInfo) => void;
+  'scan.progress': (progress: ScanProgress) => void;
+  'scan.completed': (result: ScanResult) => void;
+  'scan.failed': (error: ScanError) => void;
+}
+```
+
+---
+
+#### **3.3 Contratos para Todos los Módulos Principales:**
+
+**IConfig:**
+```typescript
+export interface IConfig {
+  load(environment?: string): Promise<AppConfig>;
+  get<T>(key: string): T;
+  set(key: string, value: unknown): void;
+  validate(): ValidationResult;
+  merge(overrides: Partial<AppConfig>): AppConfig;
+}
+```
+
+**IInput:**
+```typescript
+export interface IInput {
+  parse(args: string[]): ParsedInput;
+  prompt<T>(question: Question): Promise<T>;
+  showMenu(options: MenuOptions): Promise<MenuSelection>;
+  validate(input: ParsedInput): ValidationResult;
+}
+```
+
+**IValidation:**
+```typescript
+export interface IValidation {
+  validate(input: unknown, schema: Schema, options?: ValidationOptions): ValidationResult;
+  validatePath(path: string, options?: PathValidationOptions): Promise<PathValidationResult>;
+  validateConfig(config: unknown, schema: Schema): ValidationResult;
+  validateSecurity(input: unknown): SecurityValidationResult;
+}
+```
+
+**IProcessing:**
+```typescript
+export interface IProcessing {
+  process(items: readonly ProcessableItem[], options: ProcessingOptions): Promise<ProcessingResult>;
+  processItem(item: ProcessableItem, context: ProcessingContext): Promise<ProcessResult>;
+  cancel(): Promise<void>;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+}
+```
+
+**IParallel:**
+```typescript
+export interface IParallel {
+  map<T, R>(items: readonly T[], worker: Worker<T, R>, options?: ParallelOptions): Promise<ParallelResult<R>>;
+  forEach<T>(items: readonly T[], worker: Worker<T, void>, options?: ParallelOptions): Promise<void>;
+  reduce<T, R>(items: readonly T[], worker: Worker<T, R>, reducer: Reducer<R>, initial: R, options?: ParallelOptions): Promise<R>;
+  pipeline<T>(stages: readonly PipelineStage[], options?: PipelineOptions): Promise<PipelineResult>;
+}
+```
+
+**IMemory:**
+```typescript
+export interface IMemory {
+  load(path: string, options?: MemoryOptions): Promise<MemoryHandle>;
+  loadStream(path: string, options?: MemoryOptions): AsyncIterable<Buffer>;
+  loadChunked(path: string, chunkSize: number, options?: MemoryOptions): AsyncIterable<Buffer>;
+  release(handle: MemoryHandle): void;
+  getStatus(): MemoryStatus;
+  getStatistics(): MemoryStatistics;
+}
+```
+
+**ICache:**
+```typescript
+export interface ICache {
+  classify(items: readonly CacheableItem[], options: CacheOptions): Promise<ClassificationResult>;
+  update(classification: ClassificationResult): Promise<void>;
+  invalidate(pattern: string | string[]): Promise<void>;
+  invalidateAll(): Promise<void>;
+  getStatistics(): CacheStatistics;
+}
+```
+
+**IProgress:**
+```typescript
+export interface IProgress {
+  start(operation: ProgressOperation): ProgressHandle;
+  update(handle: ProgressHandle, delta: number): void;
+  setPhase(handle: ProgressHandle, phase: string): void;
+  setMessage(handle: ProgressHandle, message: string): void;
+  finish(handle: ProgressHandle, result: ProgressResult): void;
+  fail(handle: ProgressHandle, error: Error): void;
+  cancel(handle: ProgressHandle): void;
+}
+```
+
+---
+
+### **Fase 4: Inyección de Dependencias**
+
+#### **4.1 Principios de DI:**
+
+**Regla 1: Constructor Injection:**
+- Todas las dependencias se inyectan en el constructor
+- Nunca crear dependencias dentro del módulo
+- Facilita testing con mocks
+
+**Regla 2: Interface-Based:**
+- Inyectar interfaces, no implementaciones
+- Permite cambiar implementaciones sin modificar el código
+- Facilita múltiples implementaciones (test, prod, mock)
+
+**Regla 3: Composition Root:**
+- Solo un lugar en toda la app donde se crean las instancias
+- Típicamente `main.ts` o `app.ts`
+- Todo lo demás recibe dependencias inyectadas
+
+**Regla 4: No Service Locator:**
+- No usar un contenedor global de servicios
+- La inyección debe ser explícita
+- Evita dependencias ocultas
+
+---
+
+#### **4.2 Ejemplo de Composition Root:**
+
+```typescript
+// main.ts - Composition Root
+
+import { ConfigLoader } from './config/config.loader';
+import { SmartScanner } from './scanner/scanner.core';
+import { ValidationOrchestrator } from './validation/validation.orchestrator';
+import { ProcessingCore } from './processing/processing.core';
+import { ParallelOrchestrator } from './parallel/parallel.orchestrator';
+import { MemoryController } from './memory/memory.controller';
+import { IncrementalCache } from './cache/cache.manager';
+import { ProgressOrchestrator } from './progress/progress.orchestrator';
+import { App } from './app';
+
+async function main() {
+  // 1. Cargar configuración
+  const config = new ConfigLoader();
+  const appConfig = await config.load(process.env.NODE_ENV);
+
+  // 2. Crear utilidades base
+  const logger = new Logger(appConfig.logging);
+  const i18n = new I18nManager(appConfig.locale);
+
+  // 3. Crear módulos de infraestructura
+  const progress = new ProgressOrchestrator(appConfig.progress);
+  const memory = new MemoryController(appConfig.memory);
+  const parallel = new ParallelOrchestrator(appConfig.parallel);
+  const cache = new IncrementalCache(appConfig.cache);
+
+  // 4. Crear módulos de dominio
+  const scanner = new SmartScanner({ progress, memory, cache });
+  const validation = new ValidationOrchestrator({ config: appConfig });
+  const processing = new ProcessingCore({ scanner, validation, parallel, memory, progress });
+
+  // 5. Crear módulos de presentación
+  const input = new InputHandler({ i18n, config: appConfig });
+  const ui = new UI({ banner: appConfig.banner, theme: appConfig.theme });
+
+  // 6. Crear la app principal
+  const app = new App({
+    config: appConfig,
+    input,
+    scanner,
+    validation,
+    processing,
+    progress,
+    memory,
+    parallel,
+    cache,
+    ui,
+    logger,
+    i18n
+  });
+
+  // 7. Manejo de errores global
+  process.on('uncaughtException', (err) => app.handleError(err));
+  process.on('unhandledRejection', (err) => app.handleError(err));
+  process.on('SIGINT', () => app.handleShutdown('SIGINT'));
+  process.on('SIGTERM', () => app.handleShutdown('SIGTERM'));
+
+  // 8. Ejecutar
+  await app.run();
+}
+
+main().catch((err) => {
+  console.error('Fatal error:', err);
+  process.exit(1);
+});
+```
+
+---
+
+#### **4.3 Testing con DI:**
+
+```typescript
+// tests/unit/processing.test.ts
+
+import { ProcessingCore } from '../../src/processing/processing.core';
+import { MockScanner } from '../mocks/mock-scanner';
+import { MockValidation } from '../mocks/mock-validation';
+import { MockParallel } from '../mocks/mock-parallel';
+import { MockMemory } from '../mocks/mock-memory';
+import { MockProgress } from '../mocks/mock-progress';
+
+describe('ProcessingCore', () => {
+  let processing: ProcessingCore;
+  let mockScanner: MockScanner;
+  let mockValidation: MockValidation;
+
+  beforeEach(() => {
+    mockScanner = new MockScanner();
+    mockValidation = new MockValidation();
+    const mockParallel = new MockParallel();
+    const mockMemory = new MockMemory();
+    const mockProgress = new MockProgress();
+
+    processing = new ProcessingCore({
+      scanner: mockScanner,
+      validation: mockValidation,
+      parallel: mockParallel,
+      memory: mockMemory,
+      progress: mockProgress
+    });
+  });
+
+  it('debe procesar solo archivos válidos', async () => {
+    mockScanner.setScanResult({ files: [file1, file2, file3] });
+    mockValidation.setValidationResult({ valid: [file1, file2], invalid: [file3] });
+
+    const result = await processing.process(['/input']);
+
+    expect(result.processed).toHaveLength(2);
+    expect(result.skipped).toHaveLength(1);
+  });
+});
+```
+
+---
+
+### **Fase 5: Manejo de Errores Centralizado**
+
+#### **5.1 Jerarquía de Errores:**
+
+```typescript
+// errors/definitions.ts
+
+// Error base de la aplicación
+export class AppError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly severity: ErrorSeverity,
+    public readonly context?: Record<string, unknown>,
+    public readonly cause?: Error
+  ) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
+
+// Errores por módulo
+export class ConfigError extends AppError { /* ... */ }
+export class InputError extends AppError { /* ... */ }
+export class ScanError extends AppError { /* ... */ }
+export class ValidationError extends AppError { /* ... */ }
+export class ProcessingError extends AppError { /* ... */ }
+export class MemoryError extends AppError { /* ... */ }
+export class CacheError extends AppError { /* ... */ }
+export class IOError extends AppError { /* ... */ }
+export class NetworkError extends AppError { /* ... */ }
+
+// Severidades
+export enum ErrorSeverity {
+  INFO = 'info',
+  WARNING = 'warning',
+  ERROR = 'error',
+  FATAL = 'fatal'
+}
+```
+
+---
+
+#### **5.2 Manejador Global de Errores:**
+
+```typescript
+// errors/handler.ts
+
+export class ErrorHandler {
+  constructor(
+    private readonly logger: ILogger,
+    private readonly i18n: II18n,
+    private readonly ui: IUI,
+    private readonly config: IConfig
+  ) {}
+
+  async handle(error: unknown): Promise<void> {
+    const appError = this.normalize(error);
+
+    // 1. Loggear
+    this.logger.log(appError);
+
+    // 2. Según severidad
+    switch (appError.severity) {
+      case ErrorSeverity.INFO:
+        // Solo log, no mostrar al usuario
+        break;
+
+      case ErrorSeverity.WARNING:
+        this.ui.showWarning(this.formatForUser(appError));
+        break;
+
+      case ErrorSeverity.ERROR:
+        this.ui.showError(this.formatForUser(appError));
+        break;
+
+      case ErrorSeverity.FATAL:
+        this.ui.showError(this.formatForUser(appError));
+        await this.gracefulShutdown(appError);
+        process.exit(1);
+        break;
+    }
+
+    // 3. Intentar recuperación si es posible
+    if (this.isRecoverable(appError)) {
+      await this.attemptRecovery(appError);
+    }
+  }
+
+  private formatForUser(error: AppError): string {
+    const message = this.i18n.t(`errors.${error.code}`, error.context);
+    const suggestion = this.getSuggestion(error);
+    return suggestion ? `${message}\n💡 ${suggestion}` : message;
+  }
+}
+```
+
+---
+
+#### **5.3 Result Pattern (Alternativa a Exceptions):**
+
+```typescript
+// Patrón Result para operaciones que pueden fallar
+
+export type Result<T, E = AppError> =
+  | { success: true; value: T }
+  | { success: false; error: E };
+
+export function ok<T>(value: T): Result<T, never> {
+  return { success: true, value };
+}
+
+export function err<E>(error: E): Result<never, E> {
+  return { success: false, error };
+}
+
+// Uso en módulos
+export class Scanner {
+  async scan(path: string): Promise<Result<ScanResult, ScanError>> {
+    try {
+      const result = await this.doScan(path);
+      return ok(result);
+    } catch (e) {
+      return err(new ScanError('SCAN_FAILED', '...', ErrorSeverity.ERROR, { path }));
+    }
+  }
+}
+
+// Uso en el llamador
+const result = await scanner.scan('/input');
+if (result.success) {
+  // Usar result.value
+} else {
+  // Manejar result.error
+  await errorHandler.handle(result.error);
+}
+```
+
+---
+
+### **Fase 6: Configuración por Entorno**
+
+#### **6.1 Sistema de Configuración Multi-Ambiente:**
+
+```
+config/
+├── default.json        # Configuración base (siempre se carga)
+├── development.json    # Override para desarrollo
+├── production.json     # Override para producción
+├── test.json           # Override para tests
+└── local.json          # Override local (gitignored)
+```
+
+**Jerarquía de carga (de menor a mayor prioridad):**
+1. `default.json` - valores por defecto
+2. `{environment}.json` - valores del entorno
+3. Variables de entorno (`APP_*`)
+4. Argumentos CLI (`--config-key=value`)
+5. `local.json` - overrides locales del desarrollador
+
+---
+
+#### **6.2 Esquema de Configuración Tipado:**
+
+```typescript
+// config/config.schema.ts
+
+export const configSchema = {
+  app: {
+    name: { type: 'string', required: true },
+    version: { type: 'string', required: true },
+    environment: { type: 'enum', values: ['development', 'production', 'test'] }
+  },
+  scanner: {
+    maxDepth: { type: 'number', min: 0, default: null },
+    followSymlinks: { type: 'boolean', default: false },
+    excludePatterns: { type: 'array', items: 'string', default: [] }
+  },
+  processing: {
+    maxWorkers: { type: 'number', min: 1, default: 'auto' },
+    batchSize: { type: 'number', min: 1, default: 100 },
+    timeout: { type: 'number', min: 0, default: 30000 }
+  },
+  memory: {
+    maxMemoryMB: { type: 'number', min: 64, default: 2048 },
+    strategy: { type: 'enum', values: ['auto', 'full-load', 'streaming', 'chunked'], default: 'auto' }
+  },
+  cache: {
+    enabled: { type: 'boolean', default: true },
+    location: { type: 'string', default: '.cache/app.json' },
+    ttl: { type: 'number', min: 0, default: 86400 }
+  },
+  ui: {
+    theme: { type: 'enum', values: ['light', 'dark', 'auto'], default: 'auto' },
+    language: { type: 'string', default: 'auto' },
+    showBanner: { type: 'boolean', default: true },
+    bannerStyle: { type: 'string', default: 'auto' }
+  },
+  logging: {
+    level: { type: 'enum', values: ['debug', 'info', 'warn', 'error'], default: 'info' },
+    file: { type: 'string', default: null }
+  }
+};
+```
+
+---
+
+#### **6.3 Acceso a Configuración:**
+
+```typescript
+// Uso en módulos
+export class ProcessingCore {
+  constructor(private readonly config: IConfig) {}
+
+  async process(items: readonly ProcessableItem[]): Promise<ProcessingResult> {
+    const maxWorkers = this.config.get<number>('processing.maxWorkers');
+    const timeout = this.config.get<number>('processing.timeout');
+    // ...
+  }
+}
+```
+
+---
+
+### **Fase 7: Flujo de Ejecución por Fases**
+
+#### **7.1 Fases Estándar de una Aplicación CLI:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 1: BOOTSTRAP                                            │
+│   ├─ Detectar entorno                                        │
+│   ├─ Verificar dependencias                                  │
+│   ├─ Crear estructura de directorios                         │
+│   ├─ Instalar dependencias si es primera vez                 │
+│   └─ Mostrar loader con mensajes contextuales                │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 2: INICIALIZACIÓN                                       │
+│   ├─ Cargar configuración                                    │
+│   ├─ Inicializar logger                                      │
+│   ├─ Inicializar i18n                                        │
+│   ├─ Inicializar módulos (DI)                                │
+│   └─ Mostrar banner                                          │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 3: ENTRADA                                              │
+│   ├─ Parsear argumentos CLI                                  │
+│   ├─ Si --menu → mostrar menú interactivo                    │
+│   ├─ Si argumentos → usar directamente                       │
+│   └─ Si interactivo → prompts para faltantes                 │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 4: VALIDACIÓN                                           │
+│   ├─ Validar entradas del usuario                            │
+│   ├─ Validar configuración                                   │
+│   ├─ Validar seguridad (path traversal, etc.)                │
+│   ├─ Validar dependencias del sistema                        │
+│   └─ Si falla → mostrar errores y sugerencias, abortar       │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 5: DESCUBRIMIENTO                                       │
+│   ├─ Escanear sistema de archivos                            │
+│   ├─ Detectar duplicados                                     │
+│   ├─ Filtrar archivos válidos                                │
+│   └─ Calcular estadísticas                                   │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 6: CLASIFICACIÓN (CACHÉ)                                │
+│   ├─ Comparar con caché existente                            │
+│   ├─ Clasificar: nuevos, modificados, sin cambios, eliminados│
+│   ├─ Detectar cambios en configuración                       │
+│   └─ Reportar ahorro estimado                                │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 7: PROCESAMIENTO                                        │
+│   ├─ Procesar solo lo necesario                              │
+│   ├─ Paralelizar con control de memoria                      │
+│   ├─ Mostrar progreso en tiempo real                         │
+│   ├─ Manejar errores sin detener todo                        │
+│   └─ Soportar cancelación graceful                           │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 8: ALMACENAMIENTO                                       │
+│   ├─ Escribir resultados                                     │
+│   ├─ Actualizar caché                                        │
+│   ├─ Limpiar archivos temporales                             │
+│   └─ Verificar integridad de salida                          │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 9: REPORTE                                              │
+│   ├─ Generar resumen final                                   │
+│   ├─ Mostrar estadísticas                                    │
+│   ├─ Reportar errores/warnings                               │
+│   └─ Sugerir próximos pasos                                  │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 10: FINALIZACIÓN                                        │
+│   ├─ Liberar recursos                                        │
+│   ├─ Cerrar conexiones                                       │
+│   ├─ Flush de logs                                           │
+│   └─ Exit code apropiado                                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### **7.2 Implementación del Flujo:**
+
+```typescript
+// app.ts
+
+export class App {
+  constructor(private readonly deps: AppDependencies) {}
+
+  async run(): Promise<number> {
+    try {
+      // Fase 1: Bootstrap
+      await this.deps.bootstrap.run();
+
+      // Fase 2: Inicialización
+      await this.initialize();
+
+      // Fase 3: Entrada
+      const input = await this.getInput();
+
+      // Fase 4: Validación
+      const validation = await this.deps.validation.validate(input, inputSchema);
+      if (!validation.valid) {
+        await this.showValidationErrors(validation);
+        return 1;
+      }
+
+      // Fase 5: Descubrimiento
+      const scanResult = await this.deps.scanner.scan(input.path, input.scanOptions);
+
+      // Fase 6: Clasificación
+      const classification = await this.deps.cache.classify(scanResult.files, input.cacheOptions);
+
+      // Fase 7: Procesamiento
+      const processingResult = await this.deps.processing.process(classification.toProcess, input.processingOptions);
+
+      // Fase 8: Almacenamiento
+      await this.deps.output.write(processingResult.results, input.outputOptions);
+      await this.deps.cache.update(classification);
+
+      // Fase 9: Reporte
+      await this.showReport(scanResult, classification, processingResult);
+
+      // Fase 10: Finalización
+      await this.shutdown();
+
+      return processingResult.hasErrors ? 1 : 0;
+    } catch (error) {
+      await this.deps.errorHandler.handle(error);
+      return 1;
+    }
+  }
+}
+```
+
+---
+
+### **Fase 8: Puntos de Extensión**
+
+#### **8.1 Sistema de Plugins:**
+
+```typescript
+// plugins/plugin.interface.ts
+
+export interface Plugin {
+  readonly name: string;
+  readonly version: string;
+  readonly dependencies?: string[];
+
+  // Hooks del ciclo de vida
+  onInit?(app: App): Promise<void>;
+  onBeforeScan?(context: ScanContext): Promise<void>;
+  onAfterScan?(result: ScanResult): Promise<void>;
+  onBeforeProcess?(items: ProcessableItem[]): Promise<ProcessableItem[]>;
+  onAfterProcess?(result: ProcessingResult): Promise<void>;
+  onShutdown?(): Promise<void>;
+}
+
+// plugins/plugin.registry.ts
+
+export class PluginRegistry {
+  private plugins: Plugin[] = [];
+
+  register(plugin: Plugin): void {
+    this.validateDependencies(plugin);
+    this.plugins.push(plugin);
+  }
+
+  async runHook<H extends keyof Plugin>(hook: H, ...args: Parameters<NonNullable<Plugin[H]>>): Promise<void> {
+    for (const plugin of this.plugins) {
+      const fn = plugin[hook];
+      if (typeof fn === 'function') {
+        await (fn as Function).apply(plugin, args);
+      }
+    }
+  }
+}
+```
+
+---
+
+#### **8.2 Puntos de Extensión por Módulo:**
+
+**Scanner:**
+- `IScanFilter` - filtros personalizados
+- `IScanWalker` - recorredores personalizados (remotos, virtuales)
+- `IDuplicateDetector` - estrategias de detección personalizadas
+
+**Validation:**
+- `IValidator` - validadores personalizados
+- `IValidationRule` - reglas personalizadas
+- `ISecurityPolicy` - políticas de seguridad personalizadas
+
+**Processing:**
+- `IProcessor` - procesadores personalizados
+- `IWorker` - workers personalizados
+- `IPipelineStage` - etapas de pipeline personalizadas
+
+**Output:**
+- `IWriter` - escritores personalizados (S3, FTP, etc.)
+- `IFormatter` - formateadores personalizados
+- `IStorage` - almacenamientos personalizados
+
+**UI:**
+- `ITheme` - temas personalizados
+- `IBannerStyle` - estilos de banner personalizados
+- `IMenuRenderer` - renderizadores de menú personalizados
+
+---
+
+### **Fase 9: Módulos Obligatorios vs Opcionales**
+
+#### **9.1 Matriz de Módulos por Tipo de Proyecto:**
+
+| Módulo              | CLI Tool | Web Service | Desktop App | Automation | Library |
+|---------------------|:--------:|:-----------:|:-----------:|:----------:|:-------:|
+| **config**          | ✅       | ✅          | ✅          | ✅         | ✅      |
+| **input**           | ✅       | ⚠️          | ✅          | ⚠️         | ❌      |
+| **scanner**         | ⚠️       | ⚠️          | ⚠️          | ⚠️         | ❌      |
+| **validation**      | ✅       | ✅          | ✅          | ✅         | ✅      |
+| **processing**      | ✅       | ✅          | ✅          | ✅         | ✅      |
+| **parallel**        | ⚠️       | ⚠️          | ⚠️          | ⚠️         | ❌      |
+| **memory**          | ⚠️       | ⚠️          | ⚠️          | ⚠️         | ❌      |
+| **cache**           | ⚠️       | ⚠️          | ⚠️          | ⚠️         | ❌      |
+| **output**          | ✅       | ✅          | ✅          | ✅         | ✅      |
+| **progress**        | ✅       | ❌          | ✅          | ✅         | ❌      |
+| **ui**              | ✅       | ❌          | ✅          | ⚠️         | ❌      |
+| **reporting**       | ⚠️       | ✅          | ⚠️          | ✅         | ❌      |
+| **errors**          | ✅       | ✅          | ✅          | ✅         | ✅      |
+| **i18n**            | ⚠️       | ⚠️          | ⚠️          | ⚠️         | ⚠️      |
+| **utils**           | ✅       | ✅          | ✅          | ✅         | ✅      |
+
+**Leyenda:**
+- ✅ = Obligatorio
+- ⚠️ = Opcional (según necesidades)
+- ❌ = No aplica
+
+---
+
+#### **9.2 Plantillas por Tipo de Proyecto:**
+
+**Plantilla "CLI Tool Completa":**
+- Todos los módulos obligatorios
+- Estructura completa de directorios
+- Bootstrap + Menús + Banners
+
+**Plantilla "CLI Tool Minimalista":**
+- Solo: config, input, validation, processing, output, errors, utils
+- Sin scanner, cache, parallel, memory
+- Ideal para herramientas simples
+
+**Plantilla "Web Service":**
+- Reemplaza `input` con `http` o `graphql`
+- Reemplaza `ui` con `middleware`
+- Agrega `auth`, `database`, `queue`
+- Sin progress, sin banner
+
+**Plantilla "Desktop App":**
+- Similar a CLI pero con `ui` más rico
+- Agrega `window`, `events`, `ipc`
+- Sin bootstrap (instalador maneja eso)
+
+**Plantilla "Library":**
+- Solo módulos de dominio: validation, processing, output, errors, utils
+- Sin input, ui, progress, reporting
+- API pública bien definida
+- Documentación exhaustiva
+
+---
+
+### **Fase 10: Lista de Comprobación de Calidad**
+
+#### **10.1 Checklist de Arquitectura:**
+
+**✅ Separación de Responsabilidades:**
+- [ ] Cada módulo tiene una sola responsabilidad clara
+- [ ] No hay "god modules" con más de 500 líneas
+- [ ] La lógica de negocio está separada del I/O
+- [ ] La UI está separada de la lógica
+- [ ] La configuración está separada del código
+
+**✅ Contratos y Interfaces:**
+- [ ] Todos los módulos públicos tienen interfaces definidas
+- [ ] Las interfaces están en archivos `*.types.ts`
+- [ ] Los contratos son estables y versionados
+- [ ] Los contratos están documentados
+- [ ] No hay dependencias circulares entre módulos
+
+**✅ Inyección de Dependencias:**
+- [ ] Todas las dependencias se inyectan vía constructor
+- [ ] Solo hay un composition root (`main.ts`)
+- [ ] No hay singletons con estado global
+- [ ] No hay `new` de dependencias dentro de módulos
+- [ ] Los tests usan mocks/stubs fácilmente
+
+**✅ Manejo de Errores:**
+- [ ] Hay una jerarquía de errores definida
+- [ ] Todos los errores se manejan en un solo lugar
+- [ ] Los errores tienen códigos únicos y mensajes claros
+- [ ] Los errores tienen sugerencias de corrección
+- [ ] Los errores están internacionalizados
+
+**✅ Configuración:**
+- [ ] No hay valores hardcodeados en el código
+- [ ] La configuración es tipada y validada
+- [ ] Hay configuración por entorno (dev, prod, test)
+- [ ] Las variables de entorno tienen prioridad
+- [ ] La configuración tiene valores por defecto sensatos
+
+**✅ Testing:**
+- [ ] Cada módulo público tiene tests unitarios
+- [ ] Cobertura mínima del 80%
+- [ ] Tests de integración para flujos completos
+- [ ] Tests end-to-end para la app completa
+- [ ] Los tests son rápidos (< 10s total)
+
+**✅ Documentación:**
+- [ ] README con instrucciones claras
+- [ ] Documentación de arquitectura
+- [ ] Documentación de API pública
+- [ ] JSDoc/TSDoc en funciones públicas
+- [ ] Guía de contribución
+
+**✅ Convenciones:**
+- [ ] Nombres consistentes (kebab-case archivos, camelCase funciones)
+- [ ] Estructura de directorios sigue el estándar
+- [ ] Imports ordenados (externos, internos, relativos)
+- [ ] Linter configurado y respetado
+- [ ] Formatter configurado (Prettier, etc.)
+
+**✅ Seguridad:**
+- [ ] No hay path traversal posible
+- [ ] No hay inyecciones de comandos
+- [ ] Las rutas están sandboxed
+- [ ] Los archivos del sistema están protegidos
+- [ ] Las credenciales no están en el código
+
+**✅ Rendimiento:**
+- [ ] No hay memory leaks
+- [ ] El uso de memoria está controlado
+- [ ] Las operaciones pesadas son asíncronas
+- [ ] El paralelismo está bien gestionado
+- [ ] El caché se usa apropiadamente
+
+**✅ Observabilidad:**
+- [ ] Logs estructurados en todos los puntos clave
+- [ ] Métricas de rendimiento disponibles
+- [ ] Estadísticas de uso de recursos
+- [ ] Reportes finales claros
+- [ ] Debug mode disponible
+
+---
+
+#### **10.2 Herramientas de Verificación Automática:**
+
+**Script de Verificación:**
+```bash
+#!/bin/bash
+# scripts/check-architecture.sh
+
+echo "🔍 Verificando arquitectura..."
+
+# Verificar que no hay imports circulares
+echo "  ├─ Verificando imports circulares..."
+npx madge --circular src/
+
+# Verificar cobertura de tests
+echo "  ├─ Verificando cobertura de tests..."
+npm run test:coverage
+# Falla si < 80%
+
+# Verificar tamaño de archivos
+echo "  ├─ Verificando tamaño de archivos..."
+find src -name "*.ts" -size +50k
+# Lista archivos > 500 líneas
+
+# Verificar que no hay 'any' en TypeScript
+echo "  ├─ Verificando tipos..."
+grep -r ": any" src/ || echo "    ✅ No hay 'any'"
+
+# Verificar estructura de directorios
+echo "  ├─ Verificando estructura..."
+for dir in config input scanner validation processing output errors utils; do
+  [ -d "src/$dir" ] || echo "    ⚠️ Falta src/$dir"
+done
+
+echo "✅ Verificación completada"
+```
+
+---
+
+### **Fase 11: Integración con Otros Skills**
+
+#### **11.1 Cómo los Skills se Integran en la Arquitectura:**
+
+```
+src/
+├── 📁 config/          ← Skill de Configuración
+├── 📁 input/           ← Skill de Menús Adaptativos
+│   └── input.menu.ts   ← Implementa menú interactivo
+├── 📁 scanner/         ← Skill de Escaneo Inteligente
+├── 📁 validation/      ← Skill de Validación de Entradas
+├── 📁 processing/      ← Lógica de negocio específica
+├── 📁 parallel/        ← Skill de Procesamiento Paralelo
+├── 📁 memory/          ← Skill de Control de Memoria
+├── 📁 cache/           ← Skill de Caché Incremental
+├── 📁 output/          ← Almacenamiento de resultados
+├── 📁 progress/        ← Skill de Progress Orchestrator
+├── 📁 ui/              ← Skill de Banners + temas
+│   ├── ui.banner.ts    ← Implementa sistema de banners
+│   └── ui.messages.ts  ← Mensajes internacionalizados
+├── 📁 reporting/       ← Reportes finales
+├── 📁 errors/          ← Manejo centralizado de errores
+├── 📁 i18n/            ← Internacionalización
+└── 📁 utils/           ← Utilidades compartidas
+
+scripts/
+└── start.sh            ← Skill de Bootstrap Inteligente
+```
+
+---
+
+#### **11.2 Flujo de Integración:**
+
+```
+start.sh (Bootstrap)
+    ↓
+main.ts (Composition Root)
+    ↓
+App.run()
+    ├─ Fase 1: Bootstrap (scripts/start.sh)
+    ├─ Fase 2: Init (config, logger, i18n, DI)
+    ├─ Fase 3: Input (input/menu adaptativo)
+    ├─ Fase 4: Validation (validation orchestrator)
+    ├─ Fase 5: Scanner (smart scanner)
+    ├─ Fase 6: Cache (incremental cache)
+    ├─ Fase 7: Processing (processing core + parallel + memory)
+    ├─ Fase 8: Output (output writer)
+    ├─ Fase 9: Reporting (report generator)
+    └─ Fase 10: Shutdown (cleanup)
+    
+Durante todo:
+    ├─ Progress Orchestrator muestra avance
+    ├─ UI muestra banners y mensajes
+    ├─ Errors handler maneja problemas
+    └─ Memory controller vigila recursos
+```
+
+---
+
+### **Fase 12: Implementación por Lenguaje**
+
+#### **12.1 Node.js / TypeScript:**
+
+**Herramientas recomendadas:**
+- `tsoa` o `routing-controllers` para APIs
+- `inversify` o `tsyringe` para DI
+- `zod` o `joi` para validación
+- `winston` o `pino` para logging
+- `jest` o `vitest` para testing
+- `eslint` + `prettier` para linting
+- `madge` para detección de dependencias circulares
+- `ts-prune` para detectar código muerto
+
+**Estructura específica:**
+```
+src/
+├── *.ts (archivos TypeScript)
+├── tsconfig.json (configuración TS)
+└── tests/ con *.test.ts
+```
+
+---
+
+#### **12.2 Python:**
+
+**Herramientas recomendadas:**
+- `dependency-injector` para DI
+- `pydantic` para validación y configuración
+- `structlog` para logging estructurado
+- `pytest` para testing
+- `black` + `isort` + `flake8` para linting
+- `import-linter` para reglas de arquitectura
+
+**Estructura específica:**
+```
+src/
+└── mi_app/
+    ├── __init__.py
+    ├── config/
+    ├── scanner/
+    └── ... (cada módulo como paquete)
+tests/
+└── ... (espejo de src/)
+```
+
+---
+
+#### **12.3 Rust:**
+
+**Herramientas recomendadas:**
+- `shaku` o manual DI con traits
+- `thiserror` + `anyhow` para errores
+- `config` crate para configuración
+- `tracing` para logging
+- `cargo test` para testing
+- `cargo-geiger` para seguridad
+
+**Estructura específica:**
+```
+src/
+├── main.rs (composition root)
+├── lib.rs (exportación pública)
+├── config/
+│   └── mod.rs
+├── scanner/
+│   ├── mod.rs
+│   ├── core.rs
+│   └── types.rs
+└── ...
+```
+
+---
+
+#### **12.4 Go:**
+
+**Herramientas recomendadas:**
+- DI manual (Go prefiere explícito)
+- `go-playground/validator` para validación
+- `zap` o `zerolog` para logging
+- `testing` package nativo
+- `golangci-lint` para linting
+- `go-arch-lint` para reglas de arquitectura
+
+**Estructura específica:**
+```
+cmd/
+└── miapp/
+    └── main.go (composition root)
+internal/
+├── config/
+├── scanner/
+└── ... (módulos privados)
+pkg/
+└── ... (módulos públicos reutilizables)
+```
+
+---
+
+### **Fase 13: Casos de Uso y Ejemplos**
+
+#### **Ejemplo 1: Conversor de Imágenes (CLI Completa)**
+
+**Módulos utilizados:**
+- config, input, scanner, validation, processing, parallel, memory, cache, output, progress, ui, reporting, errors, i18n, utils
+
+**Flujo:**
+```
+1. start.sh → bootstrap
+2. Banner con estilo configurable
+3. Menú: [1] Convertir [2] Configurar [3] Ayuda [0] Salir
+4. Validar input (rutas, extensiones, opciones)
+5. Escanear carpeta input
+6. Clasificar con caché (omitir sin cambios)
+7. Procesar en paralelo con control de memoria
+8. Mostrar progreso con barra animada
+9. Escribir a output
+10. Reporte final: "✅ 150 convertidas, ⚠️ 3 warnings, ❌ 2 errores"
+```
+
+---
+
+#### **Ejemplo 2: Analizador de Código (Library)**
+
+**Módulos utilizados:**
+- config, validation, processing, output, errors, utils
+
+**Flujo:**
+```
+1. Usuario importa librería
+2. Configura opciones
+3. Llama a analyze(paths, options)
+4. Recibe resultado estructurado
+5. Maneja errores con Result pattern
+```
+
+---
+
+#### **Ejemplo 3: Servicio Web de Procesamiento**
+
+**Módulos utilizados:**
+- config, validation, processing, parallel, memory, cache, output, errors, i18n, utils
+- + http, auth, database, queue (específicos de web)
+
+**Flujo:**
+```
+1. Arranca servidor HTTP
+2. Recibe requests via API REST
+3. Valida inputs
+4. Procesa en background con cola
+5. Cachea resultados
+6. Retorna via API
+```
+
+---
+
+### **Fase 14: Beneficios del Sistema**
+
+✅ **Universal:** Aplica a cualquier tipo de aplicación en cualquier lenguaje  
+✅ **Reutilizable:** La misma arquitectura sirve para múltiples proyectos  
+✅ **Testeable:** Cada módulo puede probarse aisladamente con mocks  
+✅ **Mantenible:** Cambios localizados, sin efectos colaterales inesperados  
+✅ **Escalable:** Nuevas funcionalidades se agregan como nuevos módulos  
+✅ **Onboardable:** Nuevos desarrolladores entienden la estructura rápidamente  
+✅ **Flexible:** Módulos pueden sustituirse sin afectar el resto  
+✅ **Consistente:** Mismos patrones en todos los proyectos del equipo  
+✅ **Documentable:** Estructura clara facilita la documentación  
+✅ **Automatizable:** Scripts de verificación detectan problemas temprano  
+✅ **Integrable:** Todos los skills del ecosistema encajan naturalmente  
+✅ **Profesional:** Arquitectura de nivel enterprise desde el día uno  
+✅ **Evolucionable:** La app puede crecer sin volverse inmanejable  
+✅ **Portable:** Misma arquitectura en Node.js, Python, Rust, Go  
+✅ **Colaborativa:** Múltiples desarrolladores pueden trabajar en paralelo  
+✅ **Debuggable:** Errores se localizan rápidamente al módulo responsable  
+✅ **Extensible:** Sistema de plugins para funcionalidades de terceros  
+
+---
+
+### **Conclusión:**
+
+Esta skill transforma la arquitectura de software de un arte subjetivo y propenso a errores en un sistema estructurado, verificable y reutilizable. La Arquitectura Modular Universal proporciona un marco de trabajo completo que puede aplicarse a cualquier proyecto, desde una pequeña CLI hasta un servicio web complejo, manteniendo la misma coherencia y calidad en todos ellos.
+
+Lo más importante de esta skill es que es **meta**: define cómo deben organizarse todos los demás skills del ecosistema. Sin esta skill, los otros skills serían islas de funcionalidad difíciles de integrar. Con ella, todos los skills (Bootstrap, Menús Adaptativos, Banners, Progress Orchestrator, SmartScanner, IncrementalCache, ParallelOrchestrator, ValidationOrchestrator, MemoryController) encajan como piezas de un rompecabezas perfectamente diseñado.
+
+La combinación de principios sólidos (SRP, OCP, DIP, SoC), estructura clara de directorios, contratos bien definidos, inyección de dependencias, manejo centralizado de errores, configuración por entorno, flujo por fases, puntos de extensión y lista de verificación de calidad convierte a esta skill en la **columna vertebral** sobre la que se construyen todas las aplicaciones profesionales del ecosistema. Es la skill que hace que todas las demás funcionen juntas de forma armónica, predecible y mantenible a largo plazo.

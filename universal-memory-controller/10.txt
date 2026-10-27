@@ -1,0 +1,1242 @@
+## Skill: Control de Memoria Universal - Sistema de Administración Inteligente de Recursos para Procesamiento de Archivos
+
+**Descripción General:**
+Implementar un sistema universal, reutilizable e inteligente de control de memoria que permita a las aplicaciones procesar archivos pequeños y grandes sin consumir recursos excesivos ni provocar errores por falta de memoria (OOM); el sistema debe exponer una capa de administración que determine automáticamente si un archivo puede cargarse completamente o debe procesarse mediante bloques (chunking), streaming, memoria mapeada (mmap) o procesamiento temporal en disco, utilizando límites configurables de memoria, tamaño de lote, cantidad de archivos simultáneos y tamaño máximo de objetos almacenados; debe proporcionar utilidades para dividir archivos, liberar recursos después de cada tarea, reutilizar buffers, controlar la presión de memoria, limpiar datos temporales y registrar estadísticas de uso, además de integrarse con el procesamiento paralelo para reducir el número de trabajos simultáneos cuando el consumo aumente; también debe manejar correctamente archivos corruptos, operaciones canceladas y errores de lectura, permitir seleccionar entre máxima velocidad y mínimo consumo, y ofrecer estrategias específicas para imágenes, documentos, archivos comprimidos o flujos de datos, convirtiéndose en una solución global para aplicaciones que trabajan con grandes volúmenes de información e integrándose perfectamente con el **ParallelOrchestrator**, **Progress Orchestrator**, **SmartScanner** e **IncrementalCache**.
+
+---
+
+### **Fase 1: Arquitectura del Sistema de Control de Memoria**
+
+#### **1.1 Componentes Principales:**
+
+**MemoryController (Controlador Principal):**
+- Punto de entrada único mediante interfaz `load(path, options)` o `process(data, options)`
+- Decide automáticamente la estrategia óptima según tamaño, tipo y contexto
+- Coordina todos los componentes del sistema
+- Aplica políticas de memoria globales y por operación
+- Devuelve handles o streams según la estrategia elegida
+
+**StrategySelector (Selector de Estrategia):**
+- Analiza el archivo/operación y selecciona la mejor estrategia
+- Considera: tamaño del archivo, memoria disponible, tipo de operación, urgencia
+- Soporta estrategias: `full-load`, `chunked`, `streaming`, `mmap`, `temp-file`, `hybrid`
+- Permite override manual por el usuario
+
+**BufferPool (Pool de Buffers):**
+- Gestiona un pool de buffers reutilizables
+- Evita asignaciones/deallocations frecuentes (reduce GC pressure)
+- Buffers de diferentes tamaños pre-asignados (small, medium, large)
+- Estadísticas de uso y eficiencia del pool
+- Liberación automática cuando hay presión de memoria
+
+**MemoryMonitor (Monitor de Memoria):**
+- Monitorea uso de memoria en tiempo real
+- Detecta tendencias de crecimiento (memory leaks)
+- Calcula presión de memoria (0-100%)
+- Emite alertas antes de llegar a límites críticos
+- Soporta múltiples fuentes: RSS, heap, V8/Rust/Python specific
+
+**PressureManager (Gestor de Presión):**
+- Reacciona ante niveles de presión de memoria
+- Niveles: normal (0-60%), warning (60-80%), critical (80-95%), emergency (>95%)
+- Acciones por nivel: reducir workers, pausar, forzar GC, abortar
+- Integración con ParallelOrchestrator para ajustar concurrencia
+
+**TempFileManager (Gestor de Archivos Temporales):**
+- Crea archivos temporales para operaciones que exceden memoria
+- Limpieza automática al finalizar operaciones
+- Soporta directorios temporales configurables
+- Rotación y eliminación de temporales antiguos
+- Integración con sistema operativo (TMPDIR, etc.)
+
+**StatisticsTracker (Rastreador de Estadísticas):**
+- Registra uso de memoria por operación
+- Calcula picos, promedios y tendencias
+- Mide eficiencia de estrategias (cuánta memoria ahorró cada una)
+- Reporta hit rate del buffer pool
+- Exporta métricas para análisis posterior
+
+---
+
+### **Fase 2: Interfaz y API Pública**
+
+#### **2.1 Método Principal:**
+
+```
+load(path, options): Promise<MemoryHandle>
+```
+
+**Parámetros:**
+- `path`: Ruta al archivo o datos a cargar
+- `options`: Configuración de estrategia, límites, preferencias
+
+**Retorno:**
+- `MemoryHandle`: Objeto que abstrae el acceso a los datos (buffer, stream, mmap, etc.)
+
+#### **2.2 Métodos Adicionales:**
+
+**`loadSync(path, options)`:**
+- Versión síncrona para scripts simples
+- Bloqueante, usa la misma lógica de estrategia
+
+**`loadStream(path, options)`:**
+- Fuerza modo streaming sin importar el tamaño
+- Retorna un stream/iterator procesable
+
+**`loadChunked(path, chunkSize, options)`:**
+- Carga en bloques del tamaño especificado
+- Retorna iterador de chunks
+
+**`loadMmap(path, options)`:**
+- Fuerza memoria mapeada
+- Útil para archivos muy grandes con acceso aleatorio
+
+**`process(data, worker, options)`:**
+- Procesa datos aplicando estrategia de memoria automáticamente
+- Combina con ParallelOrchestrator si es necesario
+
+**`release(handle)`:**
+- Libera explícitamente los recursos asociados a un handle
+- Devuelve buffers al pool
+
+**`getMemoryStatus()`:**
+- Retorna estado actual de memoria (uso, presión, límites)
+
+**`getStatistics()`:**
+- Retorna estadísticas históricas de uso
+
+**`clearPool()`:**
+- Limpia completamente el buffer pool
+- Útil en situaciones de emergencia
+
+**`setLimits(limits)`:**
+- Ajusta límites de memoria en tiempo de ejecución
+
+---
+
+### **Fase 3: Estrategias de Carga**
+
+#### **3.1 Estrategia Full-Load (Carga Completa):**
+
+**Cuándo se usa:**
+- Archivos pequeños (< umbral configurable, por defecto 50MB)
+- Memoria disponible suficiente
+- Operaciones que requieren acceso aleatorio rápido
+
+**Comportamiento:**
+```
+1. Leer archivo completo en memoria
+2. Retornar buffer con todos los datos
+3. Liberar al finalizar operación
+```
+
+**Ventajas:**
+- Máxima velocidad de acceso
+- Simple de implementar
+- Ideal para operaciones CPU-bound
+
+**Desventajas:**
+- Consume mucha memoria
+- No escalable para archivos grandes
+
+**Ejemplo:**
+```javascript
+const data = await memory.load('small.txt');
+// data es un Buffer completo en memoria
+```
+
+---
+
+#### **3.2 Estrategia Chunked (Por Bloques):**
+
+**Cuándo se usa:**
+- Archivos medianos a grandes (50MB - 1GB)
+- Operaciones que pueden procesarse por partes
+- Memoria limitada
+
+**Comportamiento:**
+```
+1. Dividir archivo en chunks de tamaño configurable
+2. Cargar un chunk a la vez
+3. Procesar chunk
+4. Liberar chunk antes de cargar el siguiente
+5. Repetir hasta completar
+```
+
+**Ventajas:**
+- Memoria constante independientemente del tamaño
+- Escalable a archivos muy grandes
+- Permite procesamiento incremental
+
+**Desventajas:**
+- No permite acceso aleatorio eficiente
+- Overhead de gestión de chunks
+
+**Ejemplo:**
+```javascript
+for await (const chunk of memory.loadChunked('large.txt', 10 * MB)) {
+  processChunk(chunk);
+  // chunk se libera automáticamente al final del loop
+}
+```
+
+---
+
+#### **3.3 Estrategia Streaming (Flujo Continuo):**
+
+**Cuándo se usa:**
+- Archivos muy grandes (>1GB)
+- Operaciones que pueden procesarse secuencialmente
+- Datos que llegan de forma incremental (red, pipes)
+
+**Comportamiento:**
+```
+1. Abrir stream de lectura
+2. Leer pequeños buffers secuencialmente
+3. Procesar cada buffer inmediatamente
+4. Liberar buffer antes de leer el siguiente
+5. Cerrar stream al finalizar
+```
+
+**Ventajas:**
+- Mínimo uso de memoria (solo un buffer activo)
+- Ideal para datos infinitos o muy grandes
+- Permite procesamiento en tiempo real
+
+**Desventajas:**
+- Solo acceso secuencial
+- No permite retroceder fácilmente
+- Requiere rediseño de algoritmos
+
+**Ejemplo:**
+```javascript
+const stream = memory.loadStream('huge.txt');
+for await (const line of stream.lines()) {
+  processLine(line);
+}
+```
+
+---
+
+#### **3.4 Estrategia Mmap (Memoria Mapeada):**
+
+**Cuándo se usa:**
+- Archivos grandes con acceso aleatorio
+- Sistemas operativos que soportan mmap eficientemente
+- Cuando se necesita acceso tipo "array" sin cargar todo
+
+**Comportamiento:**
+```
+1. Mapear archivo en espacio de direcciones virtual
+2. OS carga páginas bajo demanda (lazy loading)
+3. Acceso como si fuera un array en memoria
+4. OS gestiona paginación automáticamente
+5. Desmapear al finalizar
+```
+
+**Ventajas:**
+- Acceso aleatorio eficiente
+- OS gestiona caching automáticamente
+- Ideal para búsqueda/indexación en archivos grandes
+
+**Desventajas:**
+- No disponible en todos los entornos
+- Comportamiento variable entre sistemas
+- Page faults pueden ser lentos
+
+**Ejemplo:**
+```javascript
+const mmap = memory.loadMmap('database.db');
+const record = mmap.read(offset, size);
+// Solo esa porción se carga en memoria física
+```
+
+---
+
+#### **3.5 Estrategia Temp-File (Archivo Temporal):**
+
+**Cuándo se usa:**
+- Operaciones que generan datos intermedios muy grandes
+- Cuando el resultado no cabe en memoria
+- Procesamiento multi-etapa con datos intermedios
+
+**Comportamiento:**
+```
+1. Crear archivo temporal en disco
+2. Escribir datos intermedios al archivo
+3. Leer solo lo necesario para cada etapa
+4. Eliminar archivo al finalizar
+```
+
+**Ventajas:**
+- Permite operaciones que exceden memoria RAM
+- Datos persistentes entre etapas
+- Recuperable tras crash
+
+**Desventajas:**
+- Más lento que memoria
+- Requiere espacio en disco
+- Limpieza necesaria
+
+**Ejemplo:**
+```javascript
+const temp = memory.createTempFile();
+await stage1.writeTo(temp);
+await stage2.readFrom(temp);
+temp.cleanup();
+```
+
+---
+
+#### **3.6 Estrategia Hybrid (Híbrida):**
+
+**Cuándo se usa:**
+- Casos complejos donde ninguna estrategia pura es óptima
+- Operaciones con múltiples fases de diferentes características
+
+**Comportamiento:**
+```
+1. Analizar operación y dividir en fases
+2. Aplicar estrategia óptima a cada fase
+3. Coordinar transiciones entre fases
+4. Optimizar uso de memoria global
+```
+
+**Ejemplo:**
+- Fase 1: Streaming para leer archivo grande
+- Fase 2: Full-load para procesar porción pequeña
+- Fase 3: Temp-file para resultado intermedio
+- Fase 4: Streaming para escribir resultado final
+
+---
+
+### **Fase 4: Configuración y Límites**
+
+#### **4.1 Objeto MemoryOptions Completo:**
+
+```json
+{
+  "limits": {
+    "maxMemoryMB": 2048,
+    "maxSingleObjectMB": 500,
+    "maxConcurrentFiles": 10,
+    "maxBatchSize": 100,
+    "reservedForSystemMB": 256,
+    "softLimitPercent": 80,
+    "hardLimitPercent": 95
+  },
+  "strategy": {
+    "mode": "auto",
+    "preferSpeed": false,
+    "chunkSizeMB": 10,
+    "streamBufferSizeKB": 64,
+    "mmapEnabled": true,
+    "tempFileEnabled": true,
+    "tempDir": null
+  },
+  "bufferPool": {
+    "enabled": true,
+    "smallSize": 4096,
+    "mediumSize": 65536,
+    "largeSize": 1048576,
+    "maxBuffers": 100,
+    "reuseEnabled": true
+  },
+  "pressure": {
+    "monitoring": true,
+    "checkInterval": 1000,
+    "gcOnWarning": true,
+    "reduceWorkersOnWarning": true,
+    "pauseOnCritical": true,
+    "abortOnEmergency": true
+  },
+  "cleanup": {
+    "autoRelease": true,
+    "releaseAfterMs": 5000,
+    "tempFileCleanup": true,
+    "poolCleanupOnIdle": true
+  },
+  "statistics": {
+    "enabled": true,
+    "trackPerOperation": true,
+    "exportInterval": 60000,
+    "exportPath": null
+  }
+}
+```
+
+---
+
+#### **4.2 Presets Configurables:**
+
+**Preset "máxima velocidad":**
+```json
+{
+  "limits": { "maxMemoryMB": 8192 },
+  "strategy": { "mode": "full-load", "preferSpeed": true },
+  "bufferPool": { "maxBuffers": 500 }
+}
+```
+- Carga todo en memoria
+- Pool de buffers grande
+- Ideal cuando hay RAM abundante
+
+**Preset "mínimo consumo":**
+```json
+{
+  "limits": { "maxMemoryMB": 256 },
+  "strategy": { "mode": "streaming", "preferSpeed": false },
+  "bufferPool": { "maxBuffers": 10 }
+}
+```
+- Streaming siempre que sea posible
+- Pool pequeño
+- Ideal para sistemas embebidos o con poca RAM
+
+**Preset "balanceado" (por defecto):**
+```json
+{
+  "limits": { "maxMemoryMB": 2048 },
+  "strategy": { "mode": "auto", "preferSpeed": false },
+  "bufferPool": { "maxBuffers": 100 }
+}
+```
+- Auto-selección de estrategia
+- Balance entre velocidad y consumo
+
+**Preset "servidor":**
+```json
+{
+  "limits": { "maxMemoryMB": 4096, "maxConcurrentFiles": 50 },
+  "strategy": { "mode": "auto" },
+  "pressure": { "reduceWorkersOnWarning": true }
+}
+```
+- Alta concurrencia
+- Gestión de presión agresiva
+- Ideal para servicios web
+
+**Preset "embedded":**
+```json
+{
+  "limits": { "maxMemoryMB": 64 },
+  "strategy": { "mode": "streaming", "mmapEnabled": false },
+  "bufferPool": { "maxBuffers": 5 }
+}
+```
+- Mínima huella de memoria
+- Sin mmap (no siempre disponible)
+- Ideal para IoT, Raspberry Pi, etc.
+
+---
+
+### **Fase 5: Gestión de Buffers y Pools**
+
+#### **5.1 Buffer Pool Architecture:**
+
+**Concepto:**
+- Pre-asignar buffers de diferentes tamaños
+- Reutilizar buffers en lugar de crear/destruir
+- Reducir presión sobre el garbage collector
+- Mejorar rendimiento en operaciones repetitivas
+
+**Tamaños de Buffer:**
+```
+Small:  4KB    (headers, metadatos, líneas cortas)
+Medium: 64KB   (bloques de procesamiento típico)
+Large:  1MB    (chunks de archivos grandes)
+```
+
+**Algoritmo de Reutilización:**
+```
+1. Al solicitar buffer, buscar en pool uno del tamaño adecuado
+2. Si existe → limpiar y retornar
+3. Si no existe → crear nuevo buffer
+4. Al liberar buffer → devolver al pool (si no está lleno)
+5. Si pool lleno → destruir buffer
+```
+
+**Estadísticas del Pool:**
+```
+📊 Buffer Pool Statistics:
+  ├─ Total buffers: 87/100
+  ├─ Small: 45/50 (90% uso)
+  ├─ Medium: 32/40 (80% uso)
+  ├─ Large: 10/10 (100% uso) ⚠️
+  ├─ Hit rate: 94.3%
+  ├─ Misses: 57
+  └─ Memory saved: 234MB
+```
+
+---
+
+#### **5.2 Buffer Lifecycle:**
+
+**Estados del Buffer:**
+```
+[Idle] → [Allocated] → [InUse] → [Released] → [Idle]
+                                      ↓
+                                 [Destroyed]
+```
+
+**Transiciones:**
+- `Idle → Allocated`: Solicitud de buffer
+- `Allocated → InUse`: Buffer siendo usado
+- `InUse → Released`: Operación finalizada
+- `Released → Idle`: Buffer devuelto al pool
+- `Released → Destroyed`: Pool lleno o buffer dañado
+
+---
+
+#### **5.3 Zero-Copy Optimizations:**
+
+**Concepto:**
+- Evitar copias innecesarias de datos
+- Pasar referencias en lugar de copiar
+- Usar views/slices en lugar de nuevos buffers
+
+**Técnicas:**
+- **Buffer views**: Subconjuntos de un buffer sin copiar
+- **SharedArrayBuffer**: Memoria compartida entre workers
+- **Transferable objects**: Transferir ownership sin copiar (Web Workers)
+- **Memory-mapped views**: Acceder a mmap sin copiar
+
+---
+
+### **Fase 6: Control de Presión de Memoria**
+
+#### **6.1 Niveles de Presión:**
+
+**Normal (0-60%):**
+- Operación normal
+- Todos los workers activos
+- Buffer pool puede crecer
+
+**Warning (60-80%):**
+- Alerta temprana
+- Reducir nuevos allocations
+- Forzar GC si es posible
+- Reducir workers paralelos (integración con ParallelOrchestrator)
+
+**Critical (80-95%):**
+- Pausar nuevas operaciones no críticas
+- Liberar buffers del pool agresivamente
+- Cambiar estrategia a streaming para nuevas cargas
+- Notificar al usuario
+
+**Emergency (>95%):**
+- Abortar operaciones no esenciales
+- Limpiar todo lo posible
+- Guardar estado para recuperación
+- Notificar error crítico al usuario
+
+---
+
+#### **6.2 Acciones Automáticas por Nivel:**
+
+**Nivel Warning:**
+```javascript
+if (pressure >= 60) {
+  memoryController.reduceParallelWorkers(50%);
+  memoryController.forceGC();
+  memoryController.shrinkBufferPool(30%);
+}
+```
+
+**Nivel Critical:**
+```javascript
+if (pressure >= 80) {
+  memoryController.pauseNonCritical();
+  memoryController.switchToStreaming();
+  memoryController.clearIdleBuffers();
+  notifyUser('⚠️ Memoria alta, reduciendo rendimiento');
+}
+```
+
+**Nivel Emergency:**
+```javascript
+if (pressure >= 95) {
+  memoryController.abortNonEssential();
+  memoryController.saveState();
+  memoryController.emergencyCleanup();
+  notifyUser('❌ Memoria crítica, abortando');
+}
+```
+
+---
+
+#### **6.3 Integración con ParallelOrchestrator:**
+
+**Ajuste Dinámico de Workers:**
+```
+Presión normal:    8 workers activos
+Presión warning:   4 workers activos
+Presión critical:  2 workers activos
+Presión emergency: 1 worker activo (solo finalización)
+```
+
+**Mecanismo:**
+```javascript
+memoryController.onPressureChange((level) => {
+  switch (level) {
+    case 'normal':    parallel.setWorkers(8); break;
+    case 'warning':   parallel.setWorkers(4); break;
+    case 'critical':  parallel.setWorkers(2); break;
+    case 'emergency': parallel.setWorkers(1); break;
+  }
+});
+```
+
+---
+
+### **Fase 7: Estrategias Específicas por Tipo de Archivo**
+
+#### **7.1 Imágenes:**
+
+**Características:**
+- Pueden ser muy grandes cuando se descomprimen (ej: 4K PNG → 48MB en RAM)
+- Operaciones típicas: redimensionar, convertir, comprimir
+- Algunas librerías requieren buffer completo, otras soportan streaming
+
+**Estrategia:**
+```
+Si imagen < 10MB → full-load
+Si imagen 10-100MB → chunked con tiles
+Si imagen > 100MB → streaming con librería que lo soporte
+Si formato soporta tiles (TIFF, JPEG2000) → mmap + tiles
+```
+
+**Optimizaciones específicas:**
+- Usar tiles para imágenes muy grandes
+- Liberar buffer original después de conversión
+- Procesar EXIF/metadata por separado (streaming)
+- Usar temp-files para resultados intermedios
+
+---
+
+#### **7.2 Documentos (PDF, DOCX, etc.):**
+
+**Características:**
+- Estructura compleja con múltiples partes
+- Pueden contener imágenes embebidas
+- Extracción de texto puede hacerse incrementalmente
+
+**Estrategia:**
+```
+Lectura de metadata → streaming (solo header)
+Extracción de texto → chunked por páginas
+Procesamiento de imágenes internas → estrategia por tamaño
+Generación de documento → streaming + temp-file
+```
+
+**Optimizaciones específicas:**
+- Parseo perezoso (solo cargar lo necesario)
+- Extracción de texto página por página
+- Cache de páginas ya procesadas
+- Limpieza agresiva entre páginas
+
+---
+
+#### **7.3 Archivos Comprimidos (ZIP, TAR, GZ, etc.):**
+
+**Características:**
+- Tamaño en disco ≠ tamaño en memoria
+- Descompresión puede explotar en memoria
+- Algunos formatos soportan acceso aleatorio, otros no
+
+**Estrategia:**
+```
+ZIP (soporta acceso aleatorio) → mmap + lectura selectiva
+TAR (secuencial) → streaming entry por entry
+GZ (secuencial) → streaming con buffer de descompresión
+7Z (complejo) → temp-file para descompresión completa
+```
+
+**Optimizaciones específicas:**
+- Descompresión streaming entry por entry
+- No descomprimir todo el archivo
+- Usar temp-files para archives muy grandes
+- Calcular tamaño descomprimido antes de procesar
+
+---
+
+#### **7.4 Flujos de Datos (Streams, APIs, Sockets):**
+
+**Características:**
+- Datos llegan incrementalmente
+- Tamaño total desconocido
+- Posibilidad de backpressure
+
+**Estrategia:**
+```
+Si consumidor es rápido → buffer pequeño
+Si consumidor es lento → backpressure + temp-file
+Si datos infinitos → streaming puro con windowing
+```
+
+**Optimizaciones específicas:**
+- Backpressure nativo
+- Windowing para datos infinitos
+- Checkpointing para recuperación
+- Compresión en tránsito si es útil
+
+---
+
+#### **7.5 Bases de Datos / Datos Estructurados:**
+
+**Características:**
+- Acceso aleatorio frecuente
+- Consultas que pueden retornar grandes volúmenes
+- Necesidad de índices
+
+**Estrategia:**
+```
+Consultas pequeñas → full-load resultado
+Consultas medianas → streaming con cursor
+Consultas grandes → temp-file + paginación
+Índices → mmap si es posible
+```
+
+**Optimizaciones específicas:**
+- Cursores para resultados grandes
+- Paginación automática
+- Cache de consultas frecuentes
+- Liberación explícita de cursores
+
+---
+
+### **Fase 8: Manejo de Errores y Casos Edge**
+
+#### **8.1 Errores Comunes:**
+
+**Out of Memory (OOM):**
+- Detección temprana mediante monitoreo
+- Prevención mediante límites
+- Recuperación mediante cleanup
+- Mensaje claro al usuario
+
+**Archivo Corrupto:**
+- Detección mediante magic bytes, checksums
+- Manejo graceful (saltar, reportar)
+- No consumir memoria en análisis de archivos corruptos
+- Integración con ValidationOrchestrator
+
+**Error de Lectura (EIO, permisos):**
+- Reintento con backoff
+- Liberación de recursos parciales
+- Reporte claro del error
+- Continuar con otros archivos si es batch
+
+**Operación Cancelada:**
+- Limpieza inmediata de recursos
+- Liberación de buffers al pool
+- Eliminación de archivos temporales
+- Estado consistente
+
+**Timeout:**
+- Abortar operación
+- Limpiar recursos
+- Reportar timeout
+- Opción de reintentar
+
+---
+
+#### **8.2 Prevención de Memory Leaks:**
+
+**Técnicas:**
+- **RAII pattern**: Recursos se liberan al salir del scope
+- **FinalizationRegistry**: Detección de handles no liberados
+- **WeakRef**: Referencias que no previenen GC
+- **Explicit release**: Método `release()` obligatorio
+- **Auto-cleanup**: Temporizadores para liberar recursos olvidados
+
+**Detección:**
+```javascript
+memoryController.onLeakDetected((leak) => {
+  console.warn(`⚠️ Memory leak detectado:`, leak);
+  // leak contiene: stack trace, tamaño, tiempo sin liberar
+});
+```
+
+---
+
+#### **8.3 Recuperación ante Fallos:**
+
+**Nivel 1: Retry:**
+- Reintentar operación con estrategia más conservadora
+- Ejemplo: si full-load falla por OOM, reintentar con streaming
+
+**Nivel 2: Fallback:**
+- Cambiar a estrategia más segura
+- Ejemplo: de mmap a streaming
+
+**Nivel 3: Abort:**
+- Abortar operación
+- Limpiar recursos
+- Guardar estado parcial
+- Reportar error
+
+---
+
+### **Fase 9: Estadísticas y Monitoreo**
+
+#### **9.1 Métricas Recolectadas:**
+
+**Métricas de Uso:**
+- Memoria actual (RSS, heap)
+- Pico de memoria
+- Memoria promedio
+- Presión actual (%)
+
+**Métricas de Estrategia:**
+- Estrategias usadas (conteo por tipo)
+- Hit rate de estrategia óptima
+- Tiempo en cada estrategia
+- Memoria ahorrada por estrategia
+
+**Métricas de Buffer Pool:**
+- Buffers activos/total
+- Hit rate del pool
+- Misses del pool
+- Memoria ahorrada por reutilización
+
+**Métricas de Operaciones:**
+- Operaciones completadas
+- Operaciones fallidas
+- Tiempo promedio por operación
+- Memoria promedio por operación
+
+---
+
+#### **9.2 Reporte de Estadísticas:**
+
+```
+📊 Memory Controller Statistics (última hora):
+  │
+  ├─ 🧠 Uso de Memoria:
+  │   ├─ Actual: 1.2GB / 2.0GB (60%)
+  │   ├─ Pico: 1.8GB (90%)
+  │   └─ Promedio: 950MB (47.5%)
+  │
+  ├─ 🎯 Estrategias Usadas:
+  │   ├─ Full-load: 234 (45%)
+  │   ├─ Streaming: 156 (30%)
+  │   ├─ Chunked: 89 (17%)
+  │   ├─ Mmap: 32 (6%)
+  │   └─ Temp-file: 11 (2%)
+  │
+  ├─ 🔄 Buffer Pool:
+  │   ├─ Hit rate: 94.3%
+  │   ├─ Buffers activos: 87/100
+  │   └─ Memoria ahorrada: 234MB
+  │
+  ├─ ⚡ Rendimiento:
+  │   ├─ Operaciones completadas: 522
+  │   ├─ Operaciones fallidas: 3 (0.57%)
+  │   └─ Tiempo promedio: 234ms
+  │
+  └─ 💾 Ahorro Total:
+      ├─ Memoria ahorrada vs full-load: 3.4GB
+      └─ Eficiencia global: 87.2%
+```
+
+---
+
+#### **9.3 Exportación de Métricas:**
+
+**Formatos soportados:**
+- JSON (para procesamiento automático)
+- CSV (para análisis en Excel)
+- Prometheus (para monitoreo en tiempo real)
+- InfluxDB (para series temporales)
+- Texto plano (para logs)
+
+**Integración con herramientas:**
+- Grafana (visualización)
+- Datadog (monitoreo cloud)
+- ELK Stack (logs y análisis)
+
+---
+
+### **Fase 10: Modos de Operación**
+
+#### **10.1 Modo Máxima Velocidad:**
+
+**Características:**
+- Prioriza velocidad sobre consumo
+- Usa full-load siempre que sea posible
+- Buffer pool grande
+- Workers paralelos al máximo
+- Sin restricciones estrictas
+
+**Uso recomendado:**
+- Servidores con mucha RAM
+- Procesamiento por lotes no crítico
+- Cuando el tiempo es más importante que los recursos
+
+---
+
+#### **10.2 Modo Mínimo Consumo:**
+
+**Características:**
+- Prioriza bajo consumo sobre velocidad
+- Streaming siempre que sea posible
+- Buffer pool pequeño
+- Workers paralelos limitados
+- Límites estrictos de memoria
+
+**Uso recomendado:**
+- Sistemas embebidos
+- Dispositivos con poca RAM
+- Procesamiento en segundo plano
+- Cuando la estabilidad es más importante que la velocidad
+
+---
+
+#### **10.3 Modo Adaptativo (por defecto):**
+
+**Características:**
+- Balance dinámico entre velocidad y consumo
+- Ajusta según presión de memoria
+- Cambia estrategia según contexto
+- Respeta límites pero optimiza dentro de ellos
+
+**Uso recomendado:**
+- La mayoría de los casos
+- Aplicaciones de propósito general
+- Cuando no hay preferencia clara
+
+---
+
+#### **10.4 Modo Conservador:**
+
+**Características:**
+- Siempre elige la estrategia más segura
+- Rechaza operaciones que puedan exceder límites
+- Múltiples verificaciones antes de ejecutar
+- Logging detallado
+
+**Uso recomendado:**
+- Producción crítica
+- Operaciones destructivas
+- Cuando la seguridad es prioritaria
+
+---
+
+### **Fase 11: Integración con Otros Skills**
+
+#### **11.1 Relación con ParallelOrchestrator:**
+
+**Integración estrecha:**
+- MemoryController ajusta workers según presión
+- ParallelOrchestrator consulta límites antes de crear workers
+- Backpressure compartido entre ambos sistemas
+- Estadísticas consolidadas
+
+**Flujo integrado:**
+```
+1. ParallelOrchestrator quiere procesar N archivos
+2. Consulta MemoryController: "¿cuántos puedo procesar?"
+3. MemoryController responde basado en memoria disponible
+4. Parallel ajusta workers
+5. Durante procesamiento, Memory monitorea presión
+6. Si presión sube → Parallel reduce workers
+7. Si presión baja → Parallel aumenta workers
+```
+
+---
+
+#### **11.2 Relación con Progress Orchestrator:**
+
+**Integración visual:**
+- Mostrar uso de memoria en el progreso
+- Alertas visuales cuando hay presión
+- Estadísticas de memoria en el reporte final
+
+**Ejemplo:**
+```
+Procesando archivos: ████████████████░░░░░░░░░░░░░░░░ 50%
+  ├─ Memoria: 1.2GB / 2.0GB (60%) 🟢
+  ├─ Workers: 4/4
+  └─ ETA: 20s
+```
+
+---
+
+#### **11.3 Relación con SmartScanner:**
+
+**Integración de metadatos:**
+- Scanner proporciona tamaños de archivos
+- MemoryController usa tamaños para decidir estrategia
+- Evita cargar archivos muy grandes sin planificación
+
+**Optimización:**
+- Scanner puede agrupar archivos por tamaño
+- MemoryController procesa grupos con estrategia óptima
+
+---
+
+#### **11.4 Relación con IncrementalCache:**
+
+**Integración:**
+- Cache puede almacenar resultados intermedios
+- Evita reprocesar archivos grandes
+- MemoryController consulta cache antes de cargar
+
+---
+
+#### **11.5 Relación con ValidationOrchestrator:**
+
+**Validaciones de memoria:**
+- Validar que hay suficiente memoria antes de operar
+- Detectar configuraciones que pueden causar OOM
+- Advertir sobre operaciones riesgosas
+
+---
+
+#### **11.6 Relación con Bootstrap Inteligente:**
+
+**Durante bootstrap:**
+- Detectar memoria disponible del sistema
+- Ajustar configuración inicial según recursos
+- Advertir si el sistema tiene poca RAM
+
+---
+
+### **Fase 12: Implementación por Lenguaje**
+
+#### **Node.js:**
+```javascript
+// Características específicas:
+// - V8 heap limit (~1.4GB por defecto, ampliable con --max-old-space-size)
+// - Streams nativos muy eficientes
+// - Buffer pool nativo (Buffer.poolSize)
+// - Worker threads para CPU-bound
+
+// Librerías recomendadas:
+// - stream (nativo)
+// - buffer (nativo)
+// - heap-stats (monitoreo)
+// - memwatch-next (detección de leaks)
+```
+
+**Ejemplo:**
+```javascript
+const { createReadStream } = require('fs');
+const stream = createReadStream('large.txt', { highWaterMark: 64 * 1024 });
+for await (const chunk of stream) {
+  process(chunk);
+}
+```
+
+---
+
+#### **Python:**
+```python
+# Características específicas:
+# - GIL limita paralelismo CPU-bound
+# - Generadores nativos para streaming
+# - mmap module para memoria mapeada
+# - memoryview para zero-copy
+
+# Librerías recomendadas:
+# - memory_profiler (monitoreo)
+# - mmap (nativo)
+# - itertools (streaming)
+# - multiprocessing (paralelismo)
+```
+
+**Ejemplo:**
+```python
+import mmap
+
+with open('large.txt', 'r') as f:
+    with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+        data = mm.read(1024)  # Solo esta porción en memoria
+```
+
+---
+
+#### **Rust:**
+```rust
+// Características específicas:
+// - Control total de memoria (no GC)
+// - Ownership system previene leaks
+// - Zero-cost abstractions
+// - memmap2 crate para mmap
+
+// Crates recomendados:
+// - memmap2 (mmap)
+// - bytes (buffer management)
+// - tokio (async streaming)
+// - rayon (paralelismo)
+```
+
+**Ejemplo:**
+```rust
+use memmap2::Mmap;
+use std::fs::File;
+
+let file = File::open("large.txt")?;
+let mmap = unsafe { Mmap::map(&file)? };
+// Acceso como slice sin cargar todo
+let data = &mmap[0..1024];
+```
+
+---
+
+#### **Go:**
+```go
+// Características específicas:
+// - GC eficiente pero con pausas
+// - Goroutines ligeras
+// - io package para streaming
+// - Mmap via syscall
+
+// Paquetes recomendados:
+// - eddycjy/mmap (mmap)
+// - io (streaming nativo)
+// - runtime (control de GC)
+// - sync/pool (buffer pooling)
+```
+
+**Ejemplo:**
+```go
+file, _ := os.Open("large.txt")
+defer file.Close()
+reader := bufio.NewReaderSize(file, 64*1024)
+for {
+    chunk := make([]byte, 64*1024)
+    n, _ := reader.Read(chunk)
+    if n == 0 { break }
+    process(chunk[:n])
+}
+```
+
+---
+
+### **Fase 13: Casos de Uso y Ejemplos**
+
+#### **Ejemplo 1: Conversor de Imágenes con Archivos Grandes**
+
+```javascript
+const memory = new MemoryController({
+  limits: { maxMemoryMB: 2048 },
+  strategy: { mode: 'auto' }
+});
+
+// Imagen de 500MB
+const handle = await memory.load('huge-image.tiff');
+// Automáticamente elige mmap o chunked según tamaño
+
+const converted = await convertImage(handle, 'png');
+await saveFile(converted, 'output.png');
+
+memory.release(handle);
+// Buffer devuelto al pool
+```
+
+---
+
+#### **Ejemplo 2: Procesamiento de CSV Gigante**
+
+```javascript
+const memory = new MemoryController({
+  limits: { maxMemoryMB: 512 }
+});
+
+// CSV de 10GB
+const stream = memory.loadStream('huge.csv');
+let total = 0;
+
+for await (const line of stream.lines()) {
+  const row = parseCSV(line);
+  total += row.value;
+  // Solo una línea en memoria a la vez
+}
+
+console.log(`Total: ${total}`);
+```
+
+---
+
+#### **Ejemplo 3: Extracción de ZIP con Archivos Grandes**
+
+```javascript
+const memory = new MemoryController({
+  limits: { maxMemoryMB: 1024 }
+});
+
+const zip = await memory.loadArchive('large.zip');
+
+for await (const entry of zip.entries()) {
+  // Cada entry se procesa independientemente
+  if (entry.size > 100 * MB) {
+    // Archivo grande → streaming
+    const stream = entry.stream();
+    await processStream(stream);
+  } else {
+    // Archivo pequeño → full-load
+    const buffer = await entry.read();
+    await processBuffer(buffer);
+  }
+  // Entry se libera automáticamente
+}
+```
+
+---
+
+#### **Ejemplo 4: Procesamiento Paralelo con Control de Memoria**
+
+```javascript
+const memory = new MemoryController({ limits: { maxMemoryMB: 2048 } });
+const parallel = new ParallelOrchestrator({ maxWorkers: 8 });
+
+// Integración automática
+parallel.onBeforeStart(async (items) => {
+  const maxConcurrent = await memory.getMaxConcurrent(items);
+  parallel.setWorkers(maxConcurrent);
+});
+
+memory.onPressureChange((level) => {
+  if (level === 'warning') parallel.reduceWorkers(50);
+  if (level === 'critical') parallel.reduceWorkers(75);
+});
+
+await parallel.map(files, async (file) => {
+  const handle = await memory.load(file);
+  const result = await process(handle);
+  memory.release(handle);
+  return result;
+});
+```
+
+---
+
+### **Fase 14: Beneficios del Sistema**
+
+✅ **Universal:** Aplica a cualquier tipo de archivo y operación  
+✅ **Reutilizable:** Una vez implementado, sirve para múltiples aplicaciones  
+✅ **Inteligente:** Selecciona automáticamente la estrategia óptima  
+✅ **Configurable:** Cada aspecto puede personalizarse según necesidades  
+✅ **Robusto:** Maneja OOM, archivos corruptos, cancelaciones correctamente  
+✅ **Eficiente:** Buffer pooling reduce GC pressure y mejora rendimiento  
+✅ **Adaptativo:** Ajusta comportamiento según presión de memoria  
+✅ **Integrado:** Funciona con ParallelOrchestrator, Progress, Scanner, Cache  
+✅ **Multiplataforma:** Funciona en Windows, Linux, macOS  
+✅ **Multi-lenguaje:** Implementaciones para Node.js, Python, Rust, Go  
+✅ **Observable:** Estadísticas completas y exportables  
+✅ **Seguro:** Previene memory leaks y OOM crashes  
+✅ **Escalable:** Funciona desde KB hasta TB de datos  
+✅ **Específico:** Estrategias optimizadas por tipo de archivo  
+✅ **Flexible:** Modos velocidad/consumo/balanceado/conservador  
+✅ **Recuperable:** Manejo graceful de errores y cancelaciones  
+✅ **Transparente:** El usuario no necesita entender gestión de memoria  
+
+---
+
+### **Conclusión:**
+
+Esta skill transforma la gestión de memoria de una tarea compleja y propensa a errores en un sistema inteligente, robusto y reutilizable. El MemoryController Universal puede integrarse en cualquier aplicación que procese archivos de diferentes tamaños, manteniendo la misma interfaz y comportamiento aunque cambie el caso de uso específico. Se integra perfectamente con los otros skills (Bootstrap, Menús Adaptativos, Banners, Progress Orchestrator, SmartScanner, IncrementalCache, ParallelOrchestrator, ValidationOrchestrator) para crear aplicaciones CLI completas, profesionales y con excelente experiencia de usuario.
+
+El sistema es lo suficientemente flexible para usarse en conversores de imágenes, procesadores de documentos, extractores de archivos comprimidos, analizadores de datos, descargadores de archivos, sistemas de build, migradores de datos, y cualquier otra aplicación que necesite "procesar archivos de cualquier tamaño sin explotar en memoria". La combinación de múltiples estrategias de carga, buffer pooling, control de presión, integración con paralelismo y estadísticas detalladas lo convierte en una solución enterprise-grade para gestión de memoria que permite a los desarrolladores enfocarse en la lógica de negocio mientras el sistema se encarga de usar los recursos de forma óptima.

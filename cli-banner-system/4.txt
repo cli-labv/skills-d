@@ -1,0 +1,587 @@
+## Skill: Sistema Universal de Banners CLI - Catálogo Completo y Generador Adaptativo
+
+**Descripción General:**
+Implementar un sistema universal de generación y selección de banners para aplicaciones CLI que incluya todos los estilos existentes, permitiendo elegir el tipo de banner más adecuado según el contexto, tecnología y propósito de la aplicación. Este skill debe integrarse con el **Skill de Bootstrap Inteligente** para mostrarse durante el arranque de la app.
+
+---
+
+### **Fase 1: Catálogo Completo de Tipos de Banners**
+
+#### **Categoría 1: ASCII Art Clásico (Caracteres Estándar)**
+
+**1.1 Estilo FIGlet/TOIlet (Texto grande con caracteres)**
+```
+  _____ _           _   _      ____  
+ / ____| |         | | | |    |___ \ 
+| |    | |__   __ _| |_| |__    __) |
+| |    | '_ \ / _` | __| '_ \  |__ < 
+| |____| | | | (_| | |_| | | | ___) |
+ \_____|_| |_|\__,_|\__|_| |_| |____/ 
+```
+
+**Características:**
+- Hecho con caracteres ASCII estándar (#, @, %, &, *, etc.)
+- Fácil de crear con herramientas como `figlet`, `toilet`
+- Compatible con cualquier terminal
+- Múltiples fuentes disponibles (standard, banner, big, block, etc.)
+
+**Herramientas para crearlo:**
+- `figlet` (estándar)
+- `toilet` (con colores)
+- Generadores online como patorjk.com/figlet
+
+---
+
+**1.2 Estilo Bloques Sólidos (Caracteres densos)**
+```
+██████╗ ███████╗ █████╗ ██████╗ 
+██╔══██╗██╔════╝██╔══██╗██╔══██╗
+██████╔╝█████╗  ███████║██║  ██║
+██╔══██╗██╔══╝  ██╔══██║██║  ██║
+██║  ██║███████╗██║  ██║██████╔╝
+╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═════╝ 
+```
+
+**Características:**
+- Usa caracteres Unicode de bloques (█, ▓, ▒, ░)
+- Aspecto más moderno y profesional
+- Requiere soporte UTF-8 en la terminal
+- Ideal para apps modernas
+
+---
+
+#### **Categoría 2: Banners Minimalistas con Líneas**
+
+**2.1 Estilo Box-Drawing (Cajas con líneas)**
+```
+┌─────────────────────────────────────┐
+│                                     │
+│   🚀 Mi Aplicación CLI v1.0.0      │
+│   Gestión Inteligente de Datos     │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+**Características:**
+- Usa caracteres Unicode de dibujo de cajas (┌, ┐, └, ┘, │, ─)
+- Aspecto limpio y profesional
+- Fácil de personalizar con colores
+- Perfecto para apps empresariales
+
+**Caracteres disponibles:**
+```
+┌ ┐ └ ┘ │ ─ ┬ ┴ ├ ┤ ┼ 
+╔ ╗ ╚ ╝ ║ ═ ╦ ╩ ╠ ╣ ╬
+```
+
+---
+
+**2.2 Estilo Líneas Simples**
+```
+═══════════════════════════════════════
+   MI APLICACIÓN CLI
+   Versión 1.0.0
+═══════════════════════════════════════
+```
+
+**Características:**
+- Solo líneas horizontales (═, ─, =)
+- Extremadamente minimalista
+- Compatible con cualquier terminal
+- Rápido de renderizar
+
+---
+
+#### **Categoría 3: Banners con Colores ANSI**
+
+**3.1 Estilo Gradiente de Colores**
+```
+██████╗ ██╗███████╗ ██████╗ ██████╗ ██████╗ ██████╗     (gradiente de rojo a azul)
+██╔══██╗██║██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔══██╗
+██║  ██║██║███████╗██║     ██║   ██║██████╔╝██║  ██║
+██║  ██║██║╚════██║██║     ██║   ██║██╔══██╗██║  ██║
+██████╔╝██║███████║╚██████╗╚██████╔╝██║  ██║██████╔╝
+╚═════╝ ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═════╝ 
+```
+
+**Características:**
+- Cada carácter o línea tiene un color diferente
+- Efecto visual impactante
+- Requiere soporte ANSI en la terminal
+- Se puede hacer con librerías como `chalk`, `picocolors`, `colorama`
+
+**Códigos ANSI básicos:**
+```
+Reset: \033[0m
+Negrita: \033[1m
+Rojo: \033[31m
+Verde: \033[32m
+Amarillo: \033[33m
+Azul: \033[34m
+```
+
+---
+
+**3.2 Estilo Rainbow (Arcoíris)**
+```
+███╗   ███╗██╗███████╗
+████╗ ████║██║██╔════╝
+██╔████╔██║██║███████╗  (cada línea de un color diferente)
+██║╚██╔╝██║██║╚════██║
+██║ ╚═╝ ██║██║███████║
+╚═╝     ╚═╝╚═╝╚══════╝
+```
+
+**Características:**
+- Cada línea o sección tiene un color del espectro
+- Efecto muy llamativo
+- Ideal para apps creativas o de entretenimiento
+
+---
+
+#### **Categoría 4: Banners con Información del Sistema (Estilo Neofetch)**
+
+**4.1 Estilo Neofetch/Screenfetch**
+```
+        .-/+oossssoo+/-.            user@hostname
+    `:+ssssssssssssssssss+:`        ----------------
+  -+ssssssssssssssssssyyssss+-      OS: Ubuntu 22.04 LTS
+.osssssssssssssssssssdMMMNysssso.   Kernel: 5.15.0
+/ssssssssssshdmmNNmmyNMMMMhssssss/  Uptime: 2 hours
++ssssssssshmydMMMMMMMd`/ssssssssh+  Packages: 1234
+sssssssshNMMMyhh`/hmMNssssssssssss  Shell: bash
+...ssssssshh` -/yMNssss             Terminal: gnome-terminal
+    `:+ssssssssssssssssss+:`        CPU: Intel i7
+      `.-/+oossssoo+/-.`            Memory: 4096MB / 16384MB
+```
+
+**Características:**
+- Muestra logo del sistema operativo + información del sistema
+- Muy popular en comunidades Linux
+- Se puede adaptar para mostrar info de la app en lugar del sistema
+- Herramientas: `neofetch`, `screenfetch`, `pfetch`
+
+---
+
+**4.2 Estilo Info de la App**
+```
+    ╔═══════════════════════════════════════╗
+    ║  🚀 MyApp CLI                         ║
+    ╠═══════════════════════════════════════╣
+    ║  Versión: 1.0.0                       ║
+    ║  Autor: Tu Nombre                     ║
+    ║  Licencia: MIT                        ║
+    ║  Node.js: v18.17.0                    ║
+    ║  Entorno: producción                  ║
+    ║  Sesiones: 15 activas                 ║
+    ╚═══════════════════════════════════════╝
+```
+
+**Características:**
+- Muestra información relevante de la aplicación
+- Dinámico (cambia según el estado de la app)
+- Profesional y funcional
+- Útil para debugging y contexto
+
+---
+
+#### **Categoría 5: Banners Animados**
+
+**5.1 Estilo Typing Effect (Efecto de escritura)**
+```
+Mi Aplicación CLI_  (cursor parpadeante)
+```
+
+**Características:**
+- El texto aparece letra por letra
+- Efecto de "escribiendo en tiempo real"
+- Muy atractivo visualmente
+- Se puede hacer con librerías como `terminal-kit`, `blessed`
+
+---
+
+**5.2 Estilo Fade In/Out (Aparición gradual)**
+```
+(parte del banner se ilumina gradualmente)
+```
+
+**Características:**
+- El banner aparece de forma gradual
+- Efecto cinematográfico
+- Requiere control avanzado de la terminal
+- Ideal para intros
+
+---
+
+**5.3 Estilo ASCII Animation (Frames animados)**
+```
+Frame 1:        Frame 2:        Frame 3:
+  O               o               .
+ /|\             /|\             /|\
+ / \             / \             / \
+```
+
+**Características:**
+- Múltiples frames que se alternan
+- Animación real en la terminal
+- Puede ser un logo animado o personaje
+- Herramientas: `asciinema`, `jp2a` (para convertir imágenes)
+
+---
+
+#### **Categoría 6: Banners con Emojis y Símbolos Unicode**
+
+**6.1 Estilo Emoji Art**
+```
+🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀
+🚀                                    🚀
+🚀   🎯 MI APP CLI v1.0.0 🎯        🚀
+🚀   ⚡ Rápido y Eficiente ⚡        🚀
+🚀                                    🚀
+🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀
+```
+
+**Características:**
+- Usa emojis para crear patrones visuales
+- Muy colorido y atractivo
+- Funciona en terminales modernas
+- Ideal para apps amigables o de entretenimiento
+
+---
+
+**6.2 Estilo Símbolos Decorativos**
+```
+★═══════════════════════════════════════★
+║                                       ║
+║   ✦ MI APLICACIÓN ✦                  ║
+║   ◆ Versión 1.0.0 ◆                  ║
+║                                       ║
+★═══════════════════════════════════════★
+```
+
+**Características:**
+- Usa símbolos Unicode decorativos (★, ✦, ◆, ●, ○, etc.)
+- Aspecto elegante y profesional
+- Compatible con UTF-8
+- Perfecto para apps serias pero con estilo
+
+---
+
+#### **Categoría 7: Banners Estilo GitHub Copilot / Modernos**
+
+**7.1 Estilo Copilot (Minimalista con gradiente)**
+```
+╭───────────────────────────────────────╮
+│                                       │
+│   ✨ GitHub Copilot CLI              │
+│   Tu asistente de programación       │
+│                                       │
+╰───────────────────────────────────────╯
+```
+
+**Características:**
+- Diseño extremadamente limpio y minimalista
+- Bordes redondeados (╭, ╮, ╰, ╯)
+- Espaciado generoso
+- Aspecto moderno y profesional
+- Típico de apps modernas como Copilot, Warp, Fig
+
+---
+
+**7.2 Estilo con Icono/Logo ASCII**
+```
+        /\
+       /  \
+      / ⚡ \      MY APP CLI
+     /______\     v1.0.0
+    /        \
+   /__________\
+```
+
+**Características:**
+- Incluye un logo o icono hecho con ASCII
+- Identidad visual fuerte
+- Se puede crear con herramientas como `ascii-art-generator`
+- Ideal para branding
+
+---
+
+#### **Categoría 8: Banners Dinámicos con Datos en Tiempo Real**
+
+**8.1 Estilo Dashboard**
+```
+┌─────────────────────────────────────────┐
+│  🚀 MI APP CLI                          │
+├─────────────────────────────────────────┤
+│  📊 Estado: ✅ Activo                   │
+│  🕐 Hora: 14:32:45                      │
+│  📁 Archivos procesados: 1,234          │
+│  💾 Memoria usada: 45MB                 │
+│  ⚡ Uptime: 2h 15m                      │
+└─────────────────────────────────────────┘
+```
+
+**Características:**
+- Muestra datos en tiempo real
+- Se actualiza periódicamente
+- Útil para apps de monitoreo o procesamiento
+- Muy informativo
+
+---
+
+### **Fase 2: Herramientas y Librerías para Crear Banners**
+
+#### **Herramientas de Línea de Comandos:**
+
+**FIGlet (ASCII Art clásico):**
+```bash
+figlet "Mi App"
+figlet -f banner "Mi App"
+figlet -f block "Mi App"
+```
+
+**TOIlet (FIGlet con colores):**
+```bash
+toilet "Mi App"
+toilet -f mono12 -F gay "Mi App"
+```
+
+**Cowsay (Mensaje con vaca):**
+```bash
+cowsay "Hola Mundo"
+cowsay -f dragon "Hola Mundo"
+```
+
+**Neofetch (Info del sistema):**
+```bash
+neofetch
+neofetch --ascii_distro ubuntu
+```
+
+---
+
+#### **Librerías por Lenguaje:**
+
+**Node.js:**
+- `figlet` - ASCII art
+- `chalk` - Colores ANSI
+- `boxen` - Cajas con bordes
+- `cli-boxes` - Estilos de cajas
+- `gradient-string` - Gradientes de color
+- `terminal-kit` - Efectos avanzados
+- `blessed` - Interfaces TUI completas
+
+**Python:**
+- `pyfiglet` - FIGlet para Python
+- `colorama` - Colores ANSI
+- `rich` - Banners, tablas, colores (muy popular)
+- `art` - ASCII art
+- `termcolor` - Colores simples
+
+**Bash/Shell:**
+- `figlet` - Comando nativo
+- `toilet` - Con colores
+- `boxes` - Cajas con patrones
+- `lolcat` - Efecto arcoíris
+
+**Go:**
+- `figlet` - Port de FIGlet
+- `lipgloss` - Estilos y layouts (de Charm)
+- `bubbletea` - Framework TUI completo
+
+**Rust:**
+- `art` - ASCII art
+- `crossterm` - Control de terminal
+- `ratatui` - Framework TUI
+
+---
+
+### **Fase 3: Sistema de Selección Inteligente de Banner**
+
+#### **3.1 Criterios de Selección Automática:**
+
+El sistema debe sugerir el tipo de banner según:
+
+**Tipo de Aplicación:**
+- **Apps empresariales/serias** → Box-Drawing, Minimalista con líneas, Info de la App
+- **Apps creativas/entretenimiento** → Emoji Art, Rainbow, Animados
+- **Apps de desarrollo/DevOps** → Estilo Copilot, Neofetch, Dashboard
+- **Apps educativas** → Bloques sólidos, Colores ANSI, Emoji Art
+
+**Plataforma/Destino:**
+- **Terminales antiguas** → ASCII Art clásico, Líneas simples (solo caracteres básicos)
+- **Terminales modernas** → Unicode art, Colores ANSI, Emojis
+- **Web terminals** → Box-Drawing, Colores ANSI (limitado)
+
+**Contexto de Uso:**
+- **Uso frecuente** → Minimalista (rápido de renderizar)
+- **Primera impresión/demo** → Animado, Gradiente, Impactante
+- **Producción/servidor** → Info de la App, Dashboard (informativo)
+
+**Marca/Identidad:**
+- **Con logo definido** → Logo ASCII personalizado
+- **Sin identidad visual** → FIGlet con nombre de la app
+- **Marca moderna** → Estilo Copilot, Minimalista
+
+---
+
+#### **3.2 Sistema de Configuración del Banner:**
+
+El sistema debe permitir configurar:
+
+**Archivo de configuración (`banner.config.json`):**
+```json
+{
+  "type": "box-drawing",
+  "title": "Mi App CLI",
+  "subtitle": "Gestión Inteligente",
+  "version": "1.0.0",
+  "showInfo": true,
+  "info": {
+    "author": "Tu Nombre",
+    "license": "MIT",
+    "node": "auto"
+  },
+  "colors": {
+    "primary": "#00ff00",
+    "secondary": "#0088ff",
+    "background": "transparent"
+  },
+  "animation": false,
+  "border": "rounded"
+}
+```
+
+---
+
+### **Fase 4: Integración con el Bootstrap**
+
+#### **4.1 Flujo de Trabajo:**
+
+```
+1. Usuario ejecuta: ./start.sh
+2. Sistema detecta si es primera ejecución
+3. Si es primera vez:
+   ├─ Muestra loader de bootstrap
+   ├─ Al finalizar, pregunta: "¿Qué estilo de banner prefieres?"
+   ├─ Muestra ejemplos de cada tipo
+   ├─ Usuario selecciona su preferencia
+   └─ Guarda configuración en banner.config.json
+4. Si ya está configurado:
+   ├─ Carga configuración
+   └─ Muestra el banner seleccionado
+5. Continúa con el menú principal
+```
+
+#### **4.2 Comando para Cambiar Banner:**
+
+```bash
+./start.sh --banner-config
+```
+
+Esto abre un asistente interactivo para:
+- Ver ejemplos de todos los tipos
+- Seleccionar nuevo estilo
+- Personalizar colores, texto, etc.
+- Guardar nueva configuración
+
+---
+
+### **Fase 5: Ejemplos de Implementación**
+
+#### **Ejemplo 1: Banner Box-Drawing con Rich (Python)**
+
+```python
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+
+console = Console()
+
+banner = Text()
+banner.append("🚀 MI APP CLI\n", style="bold green")
+banner.append("Gestión Inteligente de Datos\n", style="blue")
+banner.append("Versión 1.0.0", style="dim")
+
+console.print(Panel(banner, border_style="green", padding=(1, 2)))
+```
+
+**Resultado:**
+```
+╭──────────────────────────────────────╮
+│                                      │
+│ 🚀 MI APP CLI                        │
+│ Gestión Inteligente de Datos         │
+│ Versión 1.0.0                        │
+│                                      │
+╰──────────────────────────────────────╯
+```
+
+---
+
+#### **Ejemplo 2: Banner con Gradiente (Node.js)**
+
+```javascript
+const gradient = require('gradient-string');
+
+const text = `
+███╗   ███╗██╗███████╗
+████╗ ████║██║██╔════╝
+██╔████╔██║██║███████╗
+██║╚██╔╝██║██║╚════██║
+██║ ╚═╝ ██║██║███████║
+╚═╝     ╚═╝╚═╝╚══════╝
+`;
+
+console.log(gradient.rainbow(text));
+```
+
+---
+
+#### **Ejemplo 3: Banner Estilo Copilot (Go con Lipgloss)**
+
+```go
+package main
+
+import "github.com/charmbracelet/lipgloss"
+
+var titleStyle = lipgloss.NewStyle().
+    Border(lipgloss.RoundedBorder()).
+    BorderForeground(lipgloss.Color("63")).
+    Padding(1, 2).
+    Bold(true)
+
+func main() {
+    title := titleStyle.Render("✨ Mi App CLI\nTu asistente inteligente")
+    fmt.Println(title)
+}
+```
+
+---
+
+### **Fase 6: Beneficios del Sistema**
+
+✅ **Catálogo completo:** Todos los estilos existentes en un solo lugar  
+✅ **Selección inteligente:** Sugiere el banner según el contexto  
+✅ **Fácil personalización:** Configuración vía archivo JSON  
+✅ **Multi-plataforma:** Funciona en cualquier terminal moderna  
+✅ **Multi-lenguaje:** Implementaciones para Python, Node.js, Go, Rust, Bash  
+✅ **Integración perfecta:** Se integra con el Bootstrap y el Menú  
+✅ **Profesional:** Banners de calidad empresarial  
+✅ **Creativo:** Opciones para apps modernas y atractivas  
+✅ **Dinámico:** Soporte para banners con datos en tiempo real  
+✅ **Animado:** Opciones para intros y efectos visuales  
+
+---
+
+### **Relación con Otros Skills:**
+
+- **Skill: Bootstrap Inteligente** → Muestra el banner durante el arranque
+- **Skill: Menús Adaptativos** → El banner aparece antes del menú
+- **Skill: Gestión de Directorios** → El banner puede mostrar info del estado de los directorios
+
+---
+
+### **Conclusión:**
+
+Esta skill proporciona un sistema completo para crear, seleccionar y gestionar banners en aplicaciones CLI, cubriendo todos los estilos existentes desde el ASCII art clásico hasta los banners modernos estilo GitHub Copilot. El sistema es universal, adaptable y se integra perfectamente con los otros skills para crear aplicaciones CLI profesionales y con excelente experiencia de usuario.
